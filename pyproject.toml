@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ata-coder"
+version = "2.0.0"
+description = "ATA Coder — AI-powered coding assistant"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "ATA Coder Team"}
+]
+dependencies = [
+    "httpx>=0.27.0",
+    "colorama>=0.4.6",
+    "python-dotenv>=1.0.0",
+    "rich>=13.0.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+ata = "ata_coder.main:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "tiktoken>=0.5.0",
+]
+
+[tool.setuptools]
+packages = ["ata_coder"]
+
+[tool.setuptools.package-dir]
+ata_coder = "."
+
+[tool.setuptools.package-data]
+ata_coder = ["codecraft_prompt.txt"]

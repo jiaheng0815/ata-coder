@@ -1,0 +1,2 @@
+[console_scripts]
+ata = ata_coder.main:main

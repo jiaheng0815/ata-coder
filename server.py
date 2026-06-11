@@ -1,0 +1,509 @@
+"""
+ATA Coder — HTTP API Server (stdlib-only, no FastAPI dependency).
+
+Uses Python's built-in http.server + httpx for maximum compatibility.
+Provides REST API and SSE streaming for the agent.
+
+Endpoints:
+  POST /chat              — Non-streaming chat
+  POST /chat/stream       — SSE streaming chat
+  GET  /health            — Health check
+  GET  /sessions          — List active sessions
+  GET  /sessions/{id}     — Get session info
+  DELETE /sessions/{id}   — Delete a session
+  GET  /tools             — List available tools
+  GET  /skills            — List available skills
+  GET  /models            — List available models
+
+Usage:
+  python server.py                        # Start on port 8000
+  python server.py --port 3000            # Custom port
+  python server.py --host 0.0.0.0         # Public access
+  python main.py --server                 # From main launcher
+"""
+
+import json
+import logging
+import os
+import sys
+import threading
+import time
+import uuid
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlparse, parse_qs
+
+sys.path.insert(0, str(Path(__file__).parent.resolve()))
+
+from .config import AppConfig, get_config
+from .agent import CoderAgent
+from .tools import ToolExecutor, TOOL_DEFINITIONS
+from .skills import get_skill_manager
+from .memory import get_memory_store
+from .project import ProjectDetector
+from .permissions import PermissionStore, PermissionMode
+
+logger = logging.getLogger(__name__)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Session store (thread-safe in-memory)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class SessionStore:
+    """Thread-safe session store for the API server."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._sessions: dict[str, CoderAgent] = {}
+        self._metadata: dict[str, dict] = {}
+
+    def create(self, config: AppConfig, skill: str = "") -> tuple[str, CoderAgent]:
+        sid = str(uuid.uuid4())[:12]
+
+        tool_exec = ToolExecutor(config.agent)
+        perms = PermissionStore(config.agent.workspace_dir)
+        skill_mgr = get_skill_manager()
+
+        if skill:
+            skill_mgr.activate(skill)
+
+        # API mode: default to allow (caller implements own auth)
+        if os.environ.get("ATA_CODER_ALLOW_ALL", "").lower() in ("1", "true", "yes"):
+            perms.set_category_rule("shell", PermissionMode.ALLOW)
+            perms.set_category_rule("write", PermissionMode.ALLOW)
+        else:
+            perms.set_prompt_callback(lambda n, a, c: True)
+
+        agent = CoderAgent(
+            config=config,
+            tool_executor=tool_exec,
+            skill_manager=skill_mgr,
+            memory_store=get_memory_store(),
+            permission_store=perms,
+            project_info=ProjectDetector(config.agent.workspace_dir).detect(),
+        )
+
+        with self._lock:
+            self._sessions[sid] = agent
+            self._metadata[sid] = {
+                "created": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "messages": 0,
+                "tool_calls": 0,
+                "skill": skill,
+                "model": config.llm.model,
+            }
+        return sid, agent
+
+    def get(self, sid: str) -> CoderAgent | None:
+        with self._lock:
+            return self._sessions.get(sid)
+
+    def get_or_create(self, sid: str | None, config: AppConfig, skill: str = "") -> tuple[str, CoderAgent]:
+        if sid:
+            existing = self.get(sid)
+            if existing:
+                return sid, existing
+        return self.create(config, skill)
+
+    def update_meta(self, sid: str, **kwargs):
+        with self._lock:
+            if sid in self._metadata:
+                self._metadata[sid].update(kwargs)
+
+    def list_sessions(self) -> list[dict]:
+        with self._lock:
+            return [
+                {"session_id": sid, **meta}
+                for sid, meta in self._metadata.items()
+            ]
+
+    def get_meta(self, sid: str) -> dict | None:
+        with self._lock:
+            return self._metadata.get(sid)
+
+    def delete(self, sid: str) -> bool:
+        with self._lock:
+            agent = self._sessions.pop(sid, None)
+            if agent:
+                try:
+                    agent.shutdown()
+                except Exception:
+                    pass
+            self._metadata.pop(sid, None)
+            return agent is not None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HTTP Request Handler
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class AgentAPIHandler(BaseHTTPRequestHandler):
+    """HTTP handler for the ATA Coder API."""
+
+    # Class-level references (set by server factory)
+    config: AppConfig = None
+    store: SessionStore = None
+
+    def log_message(self, format, *args):
+        """Suppress default logging; use our logger."""
+        logger.debug("%s - %s", self.client_address[0], format % args)
+
+    # ── CORS ────────────────────────────────────────────────────────────
+
+    def _cors(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._cors()
+        self.end_headers()
+
+    # ── JSON helpers ────────────────────────────────────────────────────
+
+    def _json_response(self, data: Any, status: int = 200):
+        self.send_response(status)
+        self._cors()
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+
+    def _error(self, status: int, message: str):
+        self._json_response({"error": message}, status)
+
+    def _read_body(self) -> dict:
+        length = int(self.headers.get("Content-Length", 0))
+        if length == 0:
+            return {}
+        body = self.rfile.read(length)
+        return json.loads(body)
+
+    def _path_parts(self) -> list[str]:
+        parsed = urlparse(self.path)
+        return [p for p in parsed.path.split("/") if p]
+
+    # ── Routing ─────────────────────────────────────────────────────────
+
+    def do_GET(self):
+        parts = self._path_parts()
+
+        if self.path == "/health":
+            self._handle_health()
+        elif self.path == "/tools":
+            self._handle_tools()
+        elif self.path == "/skills":
+            self._handle_skills()
+        elif self.path == "/models":
+            self._handle_models()
+        elif self.path == "/sessions":
+            self._handle_list_sessions()
+        elif len(parts) == 2 and parts[0] == "sessions":
+            self._handle_get_session(parts[1])
+        else:
+            self._error(404, f"Not found: {self.path}")
+
+    def do_POST(self):
+        if self.path == "/chat":
+            self._handle_chat()
+        elif self.path == "/chat/stream":
+            self._handle_chat_stream()
+        else:
+            self._error(404, f"Not found: {self.path}")
+
+    def do_DELETE(self):
+        parts = self._path_parts()
+        if len(parts) == 2 and parts[0] == "sessions":
+            self._handle_delete_session(parts[1])
+        else:
+            self._error(404, f"Not found: {self.path}")
+
+    # ── Handlers ────────────────────────────────────────────────────────
+
+    def _handle_health(self):
+        skill_mgr = get_skill_manager()
+        self._json_response({
+            "status": "ok",
+            "model": self.config.llm.model,
+            "workspace": self.config.agent.workspace_dir,
+            "tools": len(TOOL_DEFINITIONS),
+            "skills": [s.name for s in skill_mgr.list_skills()],
+            "mcp_servers": [],
+        })
+
+    def _handle_tools(self):
+        self._json_response({
+            "tools": [
+                {"name": t["function"]["name"], "description": t["function"]["description"]}
+                for t in TOOL_DEFINITIONS
+            ]
+        })
+
+    def _handle_skills(self):
+        skill_mgr = get_skill_manager()
+        self._json_response({
+            "skills": [
+                {"name": s.name, "description": s.description, "triggers": s.triggers}
+                for s in skill_mgr.list_skills()
+            ]
+        })
+
+    def _handle_models(self):
+        """Return available models (cached from startup)."""
+        import os
+        cached = os.environ.get("ATA_CODER_MODELS_CACHE", self.config.llm.model)
+        models = [{"id": m.strip(), "owned_by": ""} for m in cached.split(",") if m.strip()]
+        self._json_response({
+            "models": models,
+            "current": self.config.llm.model,
+        })
+
+    def _handle_list_sessions(self):
+        self._json_response({"sessions": self.store.list_sessions()})
+
+    def _handle_get_session(self, sid: str):
+        meta = self.store.get_meta(sid)
+        if not meta:
+            self._error(404, "Session not found")
+            return
+        info = dict(meta)
+        agent = self.store.get(sid)
+        if agent:
+            info["conversation"] = agent.get_conversation_summary()
+        self._json_response(info)
+
+    def _handle_delete_session(self, sid: str):
+        if self.store.delete(sid):
+            self._json_response({"status": "deleted", "session_id": sid})
+        else:
+            self._error(404, "Session not found")
+
+    # ── Chat (non-streaming) ────────────────────────────────────────────
+
+    def _handle_chat(self):
+        try:
+            body = self._read_body()
+        except Exception:
+            self._error(400, "Invalid JSON body")
+            return
+
+        message = body.get("message", "")
+        if not message:
+            self._error(400, "Missing 'message' field")
+            return
+
+        session_id = body.get("session_id")
+        skill = body.get("skill", "")
+
+        sid, agent = self.store.get_or_create(session_id, self.config, skill)
+
+        try:
+            response = agent.run(message, stream=False, skill_name=skill or None)
+        except Exception as e:
+            logger.exception("Agent run failed")
+            self._error(500, str(e))
+            return
+
+        self.store.update_meta(
+            sid,
+            messages=len(agent._state.messages),
+            tool_calls=agent._state.tool_call_count,
+        )
+
+        self._json_response({
+            "session_id": sid,
+            "response": response,
+            "tool_calls": agent._state.tool_call_count,
+            "tokens": {
+                "prompt": agent.llm.total_prompt_tokens,
+                "completion": agent.llm.total_completion_tokens,
+                "total": agent.llm.total_tokens,
+            },
+        })
+
+    # ── Chat (SSE streaming) ────────────────────────────────────────────
+
+    def _handle_chat_stream(self):
+        try:
+            body = self._read_body()
+        except Exception:
+            self._error(400, "Invalid JSON body")
+            return
+
+        message = body.get("message", "")
+        if not message:
+            self._error(400, "Missing 'message' field")
+            return
+
+        session_id = body.get("session_id")
+        skill = body.get("skill", "")
+
+        sid, agent = self.store.get_or_create(session_id, self.config, skill)
+
+        # Send SSE headers
+        self.send_response(200)
+        self._cors()
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+
+        # Collect events in a thread-safe queue
+        events = []
+        events_lock = threading.Lock()
+
+        def on_event(event):
+            from .agent import TextDeltaEvent, ToolCallEvent, ToolResultEvent, CompleteEvent, ErrorEvent
+
+            if isinstance(event, TextDeltaEvent):
+                data = event.text
+                with events_lock:
+                    events.append(("text", data))
+            elif isinstance(event, ToolCallEvent):
+                with events_lock:
+                    events.append(("tool_call", {
+                        "name": event.tool_name,
+                        "arguments": event.arguments,
+                        "source": event.source,
+                    }))
+            elif isinstance(event, ToolResultEvent):
+                with events_lock:
+                    events.append(("tool_result", {
+                        "name": event.tool_name,
+                        "success": event.result.success,
+                        "output": event.result.output[:500],
+                        "error": event.result.error,
+                    }))
+            elif isinstance(event, ErrorEvent):
+                with events_lock:
+                    events.append(("error", {"error": event.error}))
+            elif isinstance(event, CompleteEvent):
+                with events_lock:
+                    events.append(("complete", {
+                        "tool_calls": event.total_tool_calls,
+                        "time": event.total_time,
+                    }))
+
+        agent.on_event(on_event)
+
+        result_holder = {"response": "", "error": None}
+
+        def run_agent():
+            try:
+                result_holder["response"] = agent.run(message, stream=True, skill_name=skill or None)
+            except Exception as e:
+                result_holder["error"] = str(e)
+
+        thread = threading.Thread(target=run_agent)
+        thread.start()
+
+        # Stream events
+        last_idx = 0
+        while thread.is_alive() or last_idx < len(events):
+            with events_lock:
+                while last_idx < len(events):
+                    evt_type, data = events[last_idx]
+                    last_idx += 1
+                    if isinstance(data, str):
+                        # Text delta — send as SSE data only
+                        line = f"event: {evt_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+                    else:
+                        line = f"event: {evt_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+                    try:
+                        self.wfile.write(line.encode("utf-8"))
+                        self.wfile.flush()
+                    except Exception:
+                        return  # client disconnected
+
+            time.sleep(0.05)
+
+        # Send final event
+        final = json.dumps({
+            "session_id": sid,
+            "response": result_holder["response"] or "",
+            "error": result_holder["error"],
+        })
+        try:
+            self.wfile.write(f"event: done\ndata: {final}\n\n".encode("utf-8"))
+            self.wfile.flush()
+        except Exception:
+            pass
+
+        self.store.update_meta(
+            sid,
+            messages=len(agent._state.messages),
+            tool_calls=agent._state.tool_call_count,
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Server factory
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def create_server(
+    config: AppConfig | None = None,
+    host: str = "127.0.0.1",
+    port: int = 8000,
+) -> HTTPServer:
+    """Create and configure the HTTP API server."""
+
+    config = config or get_config()
+
+    AgentAPIHandler.config = config
+    AgentAPIHandler.store = SessionStore()
+
+    server = HTTPServer((host, port), AgentAPIHandler)
+
+    logger.info("Server created: %s:%d", host, port)
+    return server
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Entry point
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="ATA Coder API Server")
+    parser.add_argument("--host", default="127.0.0.1", help="Bind host")
+    parser.add_argument("--port", "-p", type=int, default=8000, help="Bind port")
+    parser.add_argument("--allow-all", "-A", action="store_true", help="Skip permission prompts")
+    parser.add_argument("--model", "-m", help="Model name")
+    parser.add_argument("--verbose", "-v", action="store_true")
+    parser.add_argument("--allow-all", action="store_true", help="Allow all commands without prompting")
+    args = parser.parse_args()
+
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG)
+
+    if args.allow_all:
+        os.environ["ATA_CODER_ALLOW_ALL"] = "1"
+
+    config = get_config()
+    if args.model:
+        config.llm.model = args.model
+
+    server = create_server(config, args.host, args.port)
+
+    print(f"""
+╔══════════════════════════════════════════╗
+║     ATA Coder API Server            ║
+╠══════════════════════════════════════════╣
+║  URL:    http://{args.host}:{args.port}
+║  Model:  {config.llm.model:<30}║
+║  Tools:  {len(TOOL_DEFINITIONS):<30}║
+╚══════════════════════════════════════════╝
+""")
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nShutting down...")
+        server.shutdown()
+
+
+if __name__ == "__main__":
+    main()
