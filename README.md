@@ -133,6 +133,50 @@ Manifest priority: `SKILL.md` > `manifest.json` > `skill.yaml`
 | `/workspace <path>` | Change workspace |
 | `/context` | Show token usage |
 
+### API Server
+
+```bash
+ata server --port 8080
+```
+
+**Endpoints:**
+
+```
+POST /chat              # Non-streaming chat
+POST /chat/stream       # SSE streaming chat
+GET  /health            # Health check
+GET  /sessions          # List active sessions
+GET  /sessions/<id>     # Session info
+DELETE /sessions/<id>   # Delete session
+GET  /tools             # List available tools
+GET  /skills            # List available skills
+GET  /models            # List available models
+```
+
+**Chat request:**
+```bash
+curl -X POST http://localhost:8080/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Write a hello world in Python", "skill": "general-coder"}'
+```
+
+**Response:**
+```json
+{
+  "session_id": "write-hello-world-20260612-183000",
+  "response": "Here is a hello world...",
+  "tool_calls": 2,
+  "tokens": {"prompt": 1200, "completion": 300, "total": 1500}
+}
+```
+
+**SSE streaming:**
+```bash
+curl -N -X POST http://localhost:8080/chat/stream \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Explain async/await"}'
+```
+
 ### Configuration
 
 ```bash
@@ -207,6 +251,50 @@ Agent 线程 (agent_controller.py)
 | `/resume <id>` | 恢复已保存会话 |
 | `/extensions` | 列出已加载扩展 |
 | `/sub-agents` | 列出子 Agent |
+
+### API 服务
+
+```bash
+ata server --port 8080
+```
+
+**接口列表：**
+
+```
+POST /chat              # 非流式对话
+POST /chat/stream       # SSE 流式对话
+GET  /health            # 健康检查
+GET  /sessions          # 列出活跃会话
+GET  /sessions/<id>     # 会话详情
+DELETE /sessions/<id>   # 删除会话
+GET  /tools             # 列出工具
+GET  /skills            # 列出 Skill
+GET  /models            # 列出可用模型
+```
+
+**调用示例：**
+```bash
+curl -X POST http://localhost:8080/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "用 Python 写个 hello world", "skill": "general-coder"}'
+```
+
+**响应格式：**
+```json
+{
+  "session_id": "write-hello-world-20260612-183000",
+  "response": "这是 hello world 的代码...",
+  "tool_calls": 2,
+  "tokens": {"prompt": 1200, "completion": 300, "total": 1500}
+}
+```
+
+**SSE 流式：**
+```bash
+curl -N -X POST http://localhost:8080/chat/stream \
+  -H "Content-Type: application/json" \
+  -d '{"message": "解释 async/await 的用法"}'
+```
 
 ### 配置
 
