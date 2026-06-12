@@ -171,6 +171,35 @@ body {
 }
 .conn-bar.lan { background: var(--green); color: #000; display: block; }
 .conn-bar.local { background: var(--yellow); color: #000; display: block; }
+
+/* ═══════════════════════════ Terminal ═══════════════════════════ */
+.term-panel { border-top: 1px solid var(--border); display: none; flex-direction: column; }
+.term-panel.open { display: flex; }
+.term-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 16px; background: var(--bg-panel); border-bottom: 1px solid var(--border);
+    font-size: 12px; color: var(--comment);
+}
+.term-output {
+    flex: 1; min-height: 120px; max-height: 300px; overflow-y: auto;
+    padding: 8px 16px; font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 13px; background: #1a1d23; color: var(--fg);
+    white-space: pre-wrap; word-wrap: break-word;
+}
+.term-input-row {
+    display: flex; gap: 8px; padding: 8px 16px; background: var(--bg-panel);
+}
+.term-input-row input {
+    flex: 1; background: var(--bg-input); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 12px; font-size: 13px; font-family: 'Cascadia Code', monospace;
+    outline: none;
+}
+.term-input-row input:focus { border-color: var(--blue); }
+.term-input-row button {
+    background: var(--purple); color: #fff; border: none;
+    border-radius: 6px; padding: 6px 14px; font-size: 12px; cursor: pointer;
+}
 </style>
 </head>
 <body>
@@ -236,12 +265,27 @@ body {
   <input id="ws-sidebar" onchange="setWorkspace()">
 
   <div style="flex:1"></div>
+  <button style="background:transparent;border:1px solid var(--border);color:var(--purple);border-radius:6px;padding:8px;cursor:pointer;font-size:12px;margin-bottom:4px" onclick="toggleTerm()">💻 Terminal</button>
   <button style="background:transparent;border:1px solid var(--border);color:var(--comment);border-radius:6px;padding:8px;cursor:pointer;font-size:12px" onclick="clearChat()">Clear Chat</button>
 </div>
 
 <!-- ════════════════ Main Chat ════════════════ -->
 <div class="main">
   <div class="chat" id="chat"></div>
+
+  <!-- Terminal Panel -->
+  <div class="term-panel" id="term-panel">
+    <div class="term-header">
+      <span>💻 PowerShell (remote)</span>
+      <span style="cursor:pointer;font-size:16px" onclick="toggleTerm()" title="Close">×</span>
+    </div>
+    <div class="term-output" id="term-output">PS D:\code\ata_coder&gt; _</div>
+    <div class="term-input-row">
+      <input id="term-input" placeholder="Type PowerShell command..." onkeydown="if(event.key==='Enter')runShell()">
+      <button onclick="runShell()">Run</button>
+    </div>
+  </div>
+
   <div class="input-area">
     <textarea id="input" placeholder="Type your task…  (Enter to send, Shift+Enter for newline)" rows="1"
       onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}"></textarea>
@@ -509,6 +553,55 @@ document.getElementById('input').addEventListener('input', function() {
     this.style.height = 'auto';
     this.style.height = Math.min(this.scrollHeight, 200) + 'px';
 });
+
+/* ═══════════════════════════ Terminal ═══════════════════════════ */
+function toggleTerm() {
+    const p = document.getElementById('term-panel');
+    p.classList.toggle('open');
+    if (p.classList.contains('open')) document.getElementById('term-input').focus();
+}
+async function runShell() {
+    const input = document.getElementById('term-input');
+    const out = document.getElementById('term-output');
+    const cmd = input.value.trim();
+    if (!cmd) return;
+    input.value = '';
+    out.textContent += `\nPS> ${cmd}\n`;
+    out.scrollTop = out.scrollHeight;
+
+    try {
+        const r = await fetch(HOST + '/api/shell', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({command: cmd}),
+        });
+        if (!r.ok) { out.textContent += `HTTP ${r.status}\n`; return; }
+
+        const reader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+            const {done, value} = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, {stream: true});
+            const lines = buf.split('\n');
+            buf = lines.pop() || '';
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                try {
+                    const ev = JSON.parse(line.slice(6));
+                    if (ev.text) { out.textContent += ev.text; }
+                    if (ev.exit !== undefined) {
+                        out.textContent += ev.exit === 0 ? '' : `\n[exit code: ${ev.exit}]`;
+                    }
+                } catch(e) {}
+            }
+            out.scrollTop = out.scrollHeight;
+        }
+    } catch(e) {
+        out.textContent += `[ERROR] ${e.message}\n`;
+    }
+    out.scrollTop = out.scrollHeight;
+}
 
 // Show connection type
 if (location.hostname === '127.0.0.1' || location.hostname === 'localhost') {

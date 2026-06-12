@@ -25,6 +25,7 @@ Usage:
 import json
 import logging
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -247,6 +248,8 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
             self._handle_chat_stream()
         elif self.path == "/api/workspace":
             self._handle_set_workspace()
+        elif self.path == "/api/shell":
+            self._handle_shell()
         else:
             self._error(404, f"Not found: {self.path}")
 
@@ -319,6 +322,62 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
             return
         self.config.agent.workspace_dir = str(p)
         self._json_response({"workspace": str(p), "ok": True})
+
+    def _handle_shell(self):
+        """Execute a PowerShell command and stream output via SSE."""
+        body = self._read_body()
+        command = body.get("command", "")
+        if not command:
+            self._error(400, "Missing 'command' field")
+            return
+
+        print(f"\n💻 [shell] {command[:120]}", flush=True)
+
+        # SSE headers
+        self.send_response(200)
+        self._cors()
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+
+        try:
+            proc = subprocess.Popen(
+                ["powershell.exe", "-NoProfile", "-Command", command],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                cwd=self.config.agent.workspace_dir,
+            )
+
+            for line in proc.stdout:
+                if line.strip():
+                    self.wfile.write(
+                        f"data: {json.dumps({'text': line})}\n\n".encode("utf-8")
+                    )
+                    self.wfile.flush()
+
+            proc.wait(timeout=30)
+            exit_code = proc.returncode
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            exit_code = -1
+            self.wfile.write(
+                f"data: {json.dumps({'text': '[TIMEOUT] Command exceeded 30s limit\\n'})}\n\n".encode("utf-8")
+            )
+            self.wfile.flush()
+        except Exception as e:
+            exit_code = -1
+            self.wfile.write(
+                f"data: {json.dumps({'text': f'[ERROR] {e}\\n'})}\n\n".encode("utf-8")
+            )
+            self.wfile.flush()
+
+        self.wfile.write(
+            f"event: done\ndata: {json.dumps({'exit': exit_code})}\n\n".encode("utf-8")
+        )
+        self.wfile.flush()
+        print(f"💻 [shell] exit={exit_code}", flush=True)
 
     def _serve_spa(self):
         """Serve the single-page web UI."""
