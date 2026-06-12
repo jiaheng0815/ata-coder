@@ -348,6 +348,7 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
             return
         if not sid:
             self._error(400, "Missing 'session'. Open a session first.")
+            return
 
         print(f"💻 [{sid[:6]}] {command[:120]}", flush=True)
 
@@ -650,10 +651,10 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
 _shell_sessions: dict[str, tuple[subprocess.Popen, "queue.Queue[str]", threading.Lock]] = {}
 _shell_lock = threading.Lock()
 
-def shell_open(cwd: str) -> str:
+def shell_open(cwd: str, sid: str = "") -> str:
     """Start a persistent PowerShell process. Returns session ID."""
     import queue
-    sid = uuid.uuid4().hex[:10]
+    sid = sid or uuid.uuid4().hex[:10]
     out_queue: queue.Queue[str] = queue.Queue()
 
     proc = subprocess.Popen(
@@ -679,8 +680,8 @@ def shell_ensure(sid: str, cwd: str):
     with _shell_lock:
         if sid in _shell_sessions:
             return _shell_sessions[sid]
-    # Auto-create
-    shell_open(cwd)
+    # Auto-create with the requested SID
+    shell_open(cwd, sid=sid)
     with _shell_lock:
         return _shell_sessions.get(sid, (None, None, None))
 
