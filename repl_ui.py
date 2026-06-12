@@ -812,17 +812,29 @@ class ClaudeCodeUI:
         cat_color = CATEGORY_COLORS.get(cat, "dim")
 
         args_display = self._fmt_args(event)
+        # Store start time for run_shell to show duration
+        self._last_tool_start = time.time()
+        self._last_tool_name = event.tool_name
 
         if HAS_RICH:
             self.console.print()
+            running = ""
+            if event.tool_name == "run_shell":
+                from .fool_proof import ActionRequired
+                cmd = event.arguments.get("command", "")
+                running = f" [dim yellow]⚡ running…[/dim yellow]"
             self.console.print(
                 f"  {icon} "
                 f"[{cat_color}][{cat_label}][/{cat_color}] "
                 f"[bold]{event.tool_name}[/bold] "
-                f"[dim]{args_display}[/dim]"
+                f"[dim]{args_display}[/dim]{running}"
             )
         else:
-            print(f"\n  {Colors.DIM}[{cat_label}]{Colors.RESET} {event.tool_name} {Colors.DIM}{args_display}{Colors.RESET}")
+            running = ""
+            if event.tool_name == "run_shell":
+                cmd = event.arguments.get("command", "")
+                running = f" {Colors.YELLOW}⚡ running…{Colors.RESET}"
+            print(f"\n  {Colors.DIM}[{cat_label}]{Colors.RESET} {event.tool_name} {Colors.DIM}{args_display}{Colors.RESET}{running}")
 
     def _fmt_args(self, event: ToolCallEvent) -> str:
         """Format tool arguments for compact single-line display."""
@@ -885,12 +897,16 @@ class ClaudeCodeUI:
                 file_path = self._e(event.arguments.get("file_path", ""))
                 self.console.print(f"  [green][OK][/green] [dim]Wrote {file_path}: {lines} lines, {size:,} bytes[/dim]")
 
-            # run_shell — show exit code
+            # run_shell — show duration, output summary
             elif tool_name == "run_shell":
+                elapsed = time.time() - getattr(self, '_last_tool_start', time.time())
+                lines = output.count("\n") + 1 if output else 0
                 preview = self._e(output[:200].replace("\n", "\\n"))
-                if len(output) > 200:
-                    preview += "..."
-                self.console.print(f"  [green][OK][/green] [dim]{preview}[/dim]")
+                if len(output) > 200: preview += "..."
+                dur = f"{elapsed:.1f}s" if elapsed > 1 else f"{elapsed*1000:.0f}ms"
+                self.console.print(
+                    f"  [green][OK][/green] [dim]{lines} lines, {dur} → {preview}[/dim]"
+                )
 
             else:
                 preview = self._e(output[:120].replace("\n", " "))
