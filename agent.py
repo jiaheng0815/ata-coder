@@ -410,6 +410,14 @@ class CoderAgent:
                 logger.warning("Unknown complexity %r, using default model", complexity)
                 routed_model = settings.default_model
 
+            # Adjust by effort level
+            effort = getattr(self.config, "effort", "medium")
+            if effort == "low":
+                routed_model = settings.model_haiku
+            elif effort == "max":
+                routed_model = settings.model_opus
+            # high/medium use the complexity-based route as-is
+
             self._route_model(routed_model)
             self._routed_complexity = complexity
 

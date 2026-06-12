@@ -156,6 +156,7 @@ class AppConfig:
 
     llm: LLMConfig = field(default_factory=LLMConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
+    effort: str = field(default_factory=lambda: os.getenv("ATA_EFFORT", "medium"))
 
     @classmethod
     def load(cls) -> "AppConfig":

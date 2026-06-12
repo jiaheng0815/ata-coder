@@ -331,6 +331,36 @@ def build_registry() -> CommandRegistry:
         print(f"Model: {arg}")
         return True
 
+    @r.register("/effort", "Set effort: low/medium/high/max", "settings")
+    def cmd_effort(arg: str, ctx: dict) -> bool:
+        valid = {"low", "medium", "high", "max"}
+        if not arg or arg.lower() not in valid:
+            current = getattr(ctx.get("config", None), "effort", "medium")
+            print(f"Effort: {current}  (low / medium / high / max)")
+            print(f"  low    = fastest model, minimal tokens")
+            print(f"  medium = default model, normal tokens")
+            print(f"  high   = strong model, more tokens, thinking on")
+            print(f"  max    = best model, max tokens, max thinking")
+            return True
+        level = arg.lower()
+        ctx["config"].effort = level
+        # Apply immediately
+        agent = ctx["agent"]
+        if level == "low":
+            agent.llm.config.max_tokens = 4096
+            agent.llm.config.thinking_strength = ""
+        elif level == "medium":
+            agent.llm.config.max_tokens = 16384
+            agent.llm.config.thinking_strength = ""
+        elif level == "high":
+            agent.llm.config.max_tokens = 32768
+            agent.llm.config.thinking_strength = "medium"
+        elif level == "max":
+            agent.llm.config.max_tokens = 65536
+            agent.llm.config.thinking_strength = "high"
+        print(f"Effort: {level}")
+        return True
+
     @r.register("/models", "List models from API", "settings")
     def cmd_models(arg: str, ctx: dict) -> bool:
         from .model_registry import fetch_available_models
@@ -845,6 +875,7 @@ _COMMAND_LIST: list[tuple[str, str]] = [
     # Settings
     ("/think",          "Thinking mode"),
     ("/model",          "Change model"),
+    ("/effort",         "Set effort low/medium/high/max"),
     ("/models",         "List models from API"),
     ("/workspace",      "Change workspace"),
     ("/permissions",    "Permission rules"),
