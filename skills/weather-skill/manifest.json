@@ -44,5 +44,5 @@
   },
   "triggers": ["weather", "temperature", "forecast", "天气", "气温", "预报"],
   "tags": ["weather", "utility", "api"],
-  "dependencies": ["httpx"]
+  "dependencies": []
 }

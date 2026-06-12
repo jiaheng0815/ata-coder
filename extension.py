@@ -355,17 +355,17 @@ class ExtensionManager:
         with self._lock:
             ext = self._extensions.get(name)
             if ext is None:
-                logger.warning("Extension not found: %r", name)
+                logger.debug("Extension not found: %r", name)
                 return False
             if name in self._active:
-                return True  # 已经激活
-            # 快照依赖列表（锁内读取）
+                return True  # already active
             deps = list(ext.meta.dependencies)
 
-        # 先激活依赖（递归调用，各自获取锁）
+        # Activate dependencies (try raw name first, then skill: prefix)
         for dep in deps:
             if dep not in self._active:
-                self.activate(dep)
+                if not self.activate(dep):
+                    self.activate(f"skill:{dep}")
 
         # on_activate 在锁外调用，避免死锁
         try:

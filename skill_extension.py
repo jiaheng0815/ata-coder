@@ -51,12 +51,9 @@ class SkillExtension(Extension):
             tags=["skill", skill.name],
             priority=80,  # Skills have higher priority than general extensions (default 100)
         )
-        # 如果 skill 有依赖，也带过来
+        # Skill-to-skill dependencies (Python packages go in requirements.txt instead)
         if hasattr(skill, "dependencies") and skill.dependencies:
-            self.meta.dependencies = [
-                f"skill:{d}" if not d.startswith("skill:") else d
-                for d in skill.dependencies
-            ]
+            self.meta.dependencies = list(skill.dependencies)
 
     @property
     def skill_name(self) -> str:
