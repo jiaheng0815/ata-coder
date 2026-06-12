@@ -534,10 +534,17 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
 
 def create_server(
     config: AppConfig | None = None,
-    host: str = "127.0.0.1",
+    host: str = "0.0.0.0",
     port: int = 8000,
 ) -> HTTPServer:
     """Create and configure the HTTP API server."""
+
+    # Common mistake: --host 8080 instead of -p 8080
+    if host.isdigit():
+        print(f"\n  Heads up: --host {host} looks like a port number.")
+        print(f"  Did you mean  -p {host}  ?  Using port {host}.\n")
+        port = int(host)
+        host = "0.0.0.0"
 
     config = config or get_config()
 
