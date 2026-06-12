@@ -196,7 +196,7 @@ body {
 
     <div class="step" id="s-skill">
       <p>Choose skill</p>
-      <select id="skill-select"></select>
+      <select id="skill-select"><option value="">Default</option></select>
       <button onclick="nextStep('thinking')">Next →</button>
     </div>
 
@@ -219,10 +219,10 @@ body {
 <!-- ════════════════ Sidebar ════════════════ -->
 <div class="sidebar">
   <h2>Model</h2>
-  <select id="model-select" onchange="setModel()"></select>
+  <select id="model-select" onchange="setModel()"><option value="">Loading…</option></select>
 
   <h2>Skill</h2>
-  <select id="skill-sidebar" onchange="setSkill()"></select>
+  <select id="skill-sidebar" onchange="setSkill()"><option value="">Default</option></select>
 
   <h2>Thinking</h2>
   <select id="thinking-sidebar" onchange="setThinking()">
@@ -281,17 +281,20 @@ async function init() {
              <button onclick="config.model=document.getElementById('setup-model').value;nextStep('workspace')">Next →</button>`;
     }
 
-    // Fetch skills
-    try {
-        const r = await fetch(HOST + '/skills');
-        const d = await r.json();
-        ['skill-select', 'skill-sidebar'].forEach(id => {
-            const sel = document.getElementById(id);
-            sel.innerHTML = '<option value="">Default</option>';
-            d.skills.forEach(s => sel.innerHTML += `<option value="${s.name}">${s.name}</option>`);
-        });
-        config.skill = d.skills.length > 0 ? d.skills[0].name : '';
-    } catch(e) {}
+    // Fetch skills (with retry)
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            const r = await fetch(HOST + '/skills');
+            const d = await r.json();
+            const skills = d.skills || [];
+            ['skill-select', 'skill-sidebar'].forEach(id => {
+                const sel = document.getElementById(id);
+                sel.innerHTML = '<option value="">Default (auto-detect)</option>';
+                skills.forEach(s => sel.innerHTML += `<option value="${s.name}">${s.name}</option>`);
+            });
+            if (skills.length > 0) break;
+        } catch(e) { if (attempt < 2) await new Promise(r => setTimeout(r, 500)); }
+    }
 
     // Fetch workspace
     try {
