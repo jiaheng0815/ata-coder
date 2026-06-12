@@ -331,15 +331,16 @@ def build_registry() -> CommandRegistry:
         print(f"Model: {arg}")
         return True
 
-    @r.register("/effort", "Set effort: low/medium/high/max", "settings")
+    @r.register("/effort", "Set effort: low/medium/high/xhigh/max", "settings")
     def cmd_effort(arg: str, ctx: dict) -> bool:
-        valid = {"low", "medium", "high", "max"}
+        valid = {"low", "medium", "high", "xhigh", "max"}
         if not arg or arg.lower() not in valid:
             current = getattr(ctx.get("config", None), "effort", "medium")
-            print(f"Effort: {current}  (low / medium / high / max)")
+            print(f"Effort: {current}  (low / medium / high / xhigh / max)")
             print(f"  low    = haiku, 4K tokens, thinking disabled")
             print(f"  medium = default, 16K tokens, no thinking")
             print(f"  high   = default, 32K tokens, reasoning_effort=high")
+            print(f"  xhigh  = opus, 48K tokens, reasoning_effort=xhigh")
             print(f"  max    = opus, 64K tokens, reasoning_effort=max")
             return True
         level = arg.lower()
@@ -354,9 +355,13 @@ def build_registry() -> CommandRegistry:
         elif level == "high":
             agent.llm.config.max_tokens = 32768
             agent.llm.config.thinking_strength = "high"
+        elif level == "xhigh":
+            agent.llm.config.max_tokens = 49152
+            agent.llm.config.thinking_strength = "xhigh"
         elif level == "max":
             agent.llm.config.max_tokens = 65536
             agent.llm.config.thinking_strength = "max"
+        print(f"Effort: {level}")
         print(f"Effort: {level}")
         return True
 

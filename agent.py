@@ -414,7 +414,7 @@ class CoderAgent:
             effort = getattr(self.config, "effort", "medium")
             if effort == "low":
                 routed_model = settings.model_haiku
-            elif effort == "max":
+            elif effort in ("xhigh", "max"):
                 routed_model = settings.model_opus
             # high/medium use the complexity-based route as-is
 
