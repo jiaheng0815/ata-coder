@@ -2,7 +2,9 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>ATA Coder</title>
 <style>
 /* ═══════════════════════════ One Dark Pro Theme ═══════════════════════════ */
@@ -137,9 +139,43 @@ body {
 /* ═══════════════════════════ Spinner ═══════════════════════════ */
 .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ═══════════════════════════ Mobile ═══════════════════════════ */
+.sidebar-toggle {
+    display: none; position: fixed; top: 12px; left: 12px; z-index: 50;
+    background: var(--bg-panel); border: 1px solid var(--border); color: var(--fg);
+    width: 40px; height: 40px; border-radius: 8px; font-size: 20px;
+    cursor: pointer; align-items: center; justify-content: center;
+}
+@media (max-width: 768px) {
+    .sidebar-toggle { display: flex; }
+    .sidebar {
+        position: fixed; left: -280px; top: 0; bottom: 0; z-index: 40;
+        width: 260px; transition: left var(--transition);
+    }
+    .sidebar.open { left: 0; box-shadow: 4px 0 20px rgba(0,0,0,0.5); }
+    .input-area { padding: 10px 12px; gap: 6px; }
+    .input-area textarea { font-size: 16px; } /* prevent iOS zoom */
+    .input-area button { padding: 10px 16px; font-size: 14px; }
+    .chat { padding: 12px; }
+    .bubble { max-width: 95% !important; font-size: 14px; }
+    .setup-card { padding: 24px; }
+    .setup-card h1 { font-size: 22px; }
+}
+
+/* Connection status bar */
+.conn-bar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 99;
+    text-align: center; font-size: 11px; padding: 3px; display: none;
+}
+.conn-bar.lan { background: var(--green); color: #000; display: block; }
+.conn-bar.local { background: var(--yellow); color: #000; display: block; }
 </style>
 </head>
 <body>
+
+<div class="conn-bar" id="conn-bar"></div>
+<button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')">☰</button>
 
 <!-- ════════════════ Setup Overlay ════════════════ -->
 <div class="setup-overlay" id="setup">
@@ -424,6 +460,19 @@ document.getElementById('input').addEventListener('input', function() {
     this.style.height = 'auto';
     this.style.height = Math.min(this.scrollHeight, 200) + 'px';
 });
+
+// Show connection type
+if (location.hostname === '127.0.0.1' || location.hostname === 'localhost') {
+    const bar = document.getElementById('conn-bar');
+    bar.className = 'conn-bar local';
+    bar.textContent = '💻 Localhost';
+    setTimeout(() => bar.style.display = 'none', 3000);
+} else {
+    const bar = document.getElementById('conn-bar');
+    bar.className = 'conn-bar lan';
+    bar.textContent = '📶 LAN — ' + location.hostname;
+    setTimeout(() => bar.style.display = 'none', 5000);
+}
 
 init();
 </script>

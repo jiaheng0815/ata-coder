@@ -552,17 +552,41 @@ def create_server(
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Entry point
+def _detect_lan_ip() -> str | None:
+    """Detect the LAN IP address for mobile/tablet access."""
+    try:
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0.1)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        pass
+    # Fallback: iterate network interfaces
+    try:
+        import socket
+        hostname = socket.gethostname()
+        ip = socket.gethostbyname(hostname)
+        if ip and not ip.startswith("127."):
+            return ip
+    except Exception:
+        pass
+    return None
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="ATA Coder API Server")
-    parser.add_argument("--host", default="127.0.0.1", help="Bind host")
+    parser.add_argument("--host", default="0.0.0.0", help="Bind host (0.0.0.0 = LAN accessible)")
     parser.add_argument("--port", "-p", type=int, default=8000, help="Bind port")
+    parser.add_argument("--local-only", action="store_true", help="Bind to 127.0.0.1 only (no LAN)")
     parser.add_argument("--allow-all", "-A", action="store_true", help="Skip permission prompts")
     parser.add_argument("--model", "-m", help="Model name")
     parser.add_argument("--verbose", "-v", action="store_true")
-    parser.add_argument("--allow-all", action="store_true", help="Allow all commands without prompting")
     args = parser.parse_args()
 
     if args.verbose:
@@ -575,21 +599,26 @@ def main():
     if args.model:
         config.llm.model = args.model
 
+    if args.local_only:
+        args.host = "127.0.0.1"
+
     server = create_server(config, args.host, args.port)
 
-    web_url = f"http://{args.host}:{args.port}"
-    if args.host == "0.0.0.0":
-        web_url = f"http://127.0.0.1:{args.port}"
+    # Detect LAN IP for mobile access
+    lan_ip = _detect_lan_ip() if args.host == "0.0.0.0" else None
 
     print(f"""
-╔══════════════════════════════════════════╗
-║       ATA Coder API Server          ║
-╠══════════════════════════════════════════╣
-║  Web UI: {web_url:<29}║
-║  API:    http://{args.host}:{args.port}
-║  Model:  {config.llm.model:<30}║
-║  Tools:  {len(TOOL_DEFINITIONS):<30}║
-╚══════════════════════════════════════════╝
+╔══════════════════════════════════════════════════╗
+║         ATA Coder  —  Web UI              ║
+╠══════════════════════════════════════════════════╣""")
+    print(f"║  Local:   http://127.0.0.1:{args.port:<29}║")
+    if lan_ip:
+        print(f"║  LAN:     http://{lan_ip}:{args.port:<29}║")
+    else:
+        print(f"║  LAN:     (use --host 0.0.0.0 for LAN access) ║")
+    print(f"""║  Model:   {config.llm.model:<34}║
+║  Tools:   {len(TOOL_DEFINITIONS):<34}║
+╚══════════════════════════════════════════════════╝
 """)
 
     try:
