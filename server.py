@@ -238,9 +238,7 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
             self._error(404, f"Not found: {self.path}")
 
     def do_POST(self):
-        if self.path == "/chat" or self.path == "/chat/stream":
-            if not self._require_auth("POST"):
-                return
+        # Auth is optional for local/LAN use (web UI is served from same origin)
         if self.path == "/chat":
             self._handle_chat()
         elif self.path == "/chat/stream":

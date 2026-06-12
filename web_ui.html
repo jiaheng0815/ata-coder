@@ -368,6 +368,13 @@ async function send() {
             method: 'POST', headers: {'Content-Type':'application/json'},
             body: JSON.stringify(body),
         });
+        if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            currentMsg.innerHTML = `<span style="color:var(--red)">HTTP ${r.status}: ${err.error || r.statusText}</span>`;
+            streaming = false;
+            document.getElementById('send-btn').disabled = false;
+            return;
+        }
         const reader = r.body.getReader();
         const decoder = new TextDecoder();
         let buf = '';
@@ -406,7 +413,7 @@ async function send() {
             chat.scrollTop = chat.scrollHeight;
         }
     } catch(e) {
-        currentMsg.innerHTML = `<span style="color:var(--red)">Error: ${e.message}</span>`;
+        currentMsg.innerHTML = `<span style="color:var(--red)">Connection error: ${e.message}</span>`;
     }
 
     if (!fullText) currentMsg.innerHTML = renderMarkdown('*(no response)*');
