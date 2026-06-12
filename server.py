@@ -367,6 +367,11 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
             self._error(400, "Missing 'message' field")
             return
 
+        # ── Log incoming request ──────────────────────────────────────────
+        print(f"\n{'═'*60}")
+        print(f"📩 [{time.strftime('%H:%M:%S')}] {message[:200]}")
+        print(f"{'═'*60}\n")
+
         session_id = body.get("session_id")
         skill = body.get("skill", "")
         model_override = body.get("model", "")
@@ -423,6 +428,14 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
         model_override = body.get("model", "")
         thinking_override = body.get("thinking", "")
 
+        # ── Log incoming request ──────────────────────────────────────────
+        print(f"\n{'═'*60}")
+        print(f"📩 [{time.strftime('%H:%M:%S')}] {message[:200]}")
+        if skill:   print(f"   skill={skill}")
+        if model_override: print(f"   model={model_override}")
+        if thinking_override: print(f"   thinking={thinking_override}")
+        print(f"{'─'*60}")
+
         sid, agent = self.store.get_or_create(session_id, self.config, skill)
 
         if model_override:
@@ -440,57 +453,45 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
 
-        # Collect events in a thread-safe queue
         events = []
         events_lock = threading.Lock()
 
         def on_event(event):
             from .agent import (TextDeltaEvent, ToolCallEvent, ToolResultEvent,
                                 CompleteEvent, ErrorEvent, ReasoningEvent, ThinkingEvent)
+            import json as _json
 
             if isinstance(event, TextDeltaEvent):
-                # Print text chunks to server console
-                if event.text.strip():
-                    sys.stdout.write(event.text)
-                    sys.stdout.flush()
+                ev = {"type": "text", "text": event.text}
+                print(_json.dumps(ev, ensure_ascii=False))
                 with events_lock:
                     events.append(("text", event.text))
             elif isinstance(event, (ReasoningEvent, ThinkingEvent)):
-                # Thinking/reasoning — dim output on server
-                sys.stdout.write(f"\n  [thinking] {event.text[:120]}...\n" if len(event.text) > 120 else f"\n  [thinking] {event.text}\n")
-                sys.stdout.flush()
+                ev = {"type": "thinking", "text": event.text[:300]}
+                print(_json.dumps(ev, ensure_ascii=False))
                 with events_lock:
                     events.append(("thinking", event.text[:200]))
             elif isinstance(event, ToolCallEvent):
-                print(f"\n  🔧 [{event.source}] {event.tool_name}({_brief_args(event.arguments)})")
+                ev = {"type": "tool_call", "tool": event.tool_name, "source": event.source, "args": _brief_dict(event.arguments)}
+                print(_json.dumps(ev, ensure_ascii=False))
                 with events_lock:
-                    events.append(("tool_call", {
-                        "name": event.tool_name,
-                        "arguments": event.arguments,
-                        "source": event.source,
-                    }))
+                    events.append(("tool_call", {"name": event.tool_name, "arguments": event.arguments, "source": event.source}))
             elif isinstance(event, ToolResultEvent):
-                status = "✓" if event.result.success else "✗"
-                preview = (event.result.output or "")[:200].replace("\n", " ")
-                print(f"  {status} {event.tool_name}: {preview}")
+                ev = {"type": "tool_result", "tool": event.tool_name, "ok": event.result.success, "output": (event.result.output or "")[:300]}
+                print(_json.dumps(ev, ensure_ascii=False))
                 with events_lock:
-                    events.append(("tool_result", {
-                        "name": event.tool_name,
-                        "success": event.result.success,
-                        "output": (event.result.output or "")[:500],
-                        "error": event.result.error,
-                    }))
+                    events.append(("tool_result", {"name": event.tool_name, "success": event.result.success, "output": (event.result.output or "")[:500], "error": event.result.error}))
             elif isinstance(event, ErrorEvent):
-                print(f"\n  ❌ {event.error}")
+                ev = {"type": "error", "error": event.error}
+                print(_json.dumps(ev, ensure_ascii=False))
                 with events_lock:
                     events.append(("error", {"error": event.error}))
             elif isinstance(event, CompleteEvent):
-                print(f"\n  ✓ Done — {event.total_tool_calls} tools, {event.total_time:.1f}s\n")
+                ev = {"type": "complete", "tools": event.total_tool_calls, "time": round(event.total_time, 1)}
+                print(_json.dumps(ev, ensure_ascii=False))
+                print(f"{'═'*60}\n")
                 with events_lock:
-                    events.append(("complete", {
-                        "tool_calls": event.total_tool_calls,
-                        "time": event.total_time,
-                    }))
+                    events.append(("complete", {"tool_calls": event.total_tool_calls, "time": event.total_time}))
 
         agent.on_event(on_event)
 
@@ -575,16 +576,17 @@ def create_server(
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Entry point
-def _brief_args(args: dict) -> str:
-    """Summarize tool arguments for console display."""
-    if not args:
-        return ""
-    items = []
-    for k, v in args.items():
-        if isinstance(v, str):
-            v = v[:80] + ("..." if len(v) > 80 else "")
-        items.append(f"{k}={v!r}")
-    return ", ".join(items[:3])
+def _brief_dict(d: dict) -> dict:
+    """Truncate string values for readable console output."""
+    if not d:
+        return {}
+    out = {}
+    for k, v in d.items():
+        if isinstance(v, str) and len(v) > 100:
+            out[k] = v[:100] + "..."
+        else:
+            out[k] = v
+    return out
 
 
 def _detect_lan_ip() -> str | None:
