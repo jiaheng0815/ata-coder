@@ -337,10 +337,10 @@ def build_registry() -> CommandRegistry:
         if not arg or arg.lower() not in valid:
             current = getattr(ctx.get("config", None), "effort", "medium")
             print(f"Effort: {current}  (low / medium / high / max)")
-            print(f"  low    = fastest model, minimal tokens")
-            print(f"  medium = default model, normal tokens")
-            print(f"  high   = strong model, more tokens, thinking on")
-            print(f"  max    = best model, max tokens, max thinking")
+            print(f"  low    = haiku, 4K tokens, thinking disabled")
+            print(f"  medium = default, 16K tokens, no thinking")
+            print(f"  high   = default, 32K tokens, reasoning_effort=high")
+            print(f"  max    = opus, 64K tokens, reasoning_effort=max")
             return True
         level = arg.lower()
         ctx["config"].effort = level

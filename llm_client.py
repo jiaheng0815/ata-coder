@@ -134,9 +134,12 @@ class LLMClient:
             body["tool_choice"] = "auto"
 
         # Thinking mode
+        # xhigh is an alias for max (some UIs use this name)
+        _THINKING_MAP = {"xhigh": "max"}
         thinking_strength = getattr(self.config, 'thinking_strength', '') or ''
         if thinking_strength and thinking_strength.lower() != 'off':
-            body["reasoning_effort"] = thinking_strength.lower()
+            strength = thinking_strength.lower()
+            body["reasoning_effort"] = _THINKING_MAP.get(strength, strength)
             body.pop("temperature", None)
         elif getattr(self.config, 'thinking_disabled', False):
             body["extra_body"] = {"thinking": {"type": "disabled"}}
@@ -233,9 +236,11 @@ class LLMClient:
             body["tool_choice"] = "auto"
 
         # Thinking mode for streaming
+        _THINKING_MAP = {"xhigh": "max"}
         thinking_strength = getattr(self.config, 'thinking_strength', '') or ''
         if thinking_strength and thinking_strength.lower() != 'off':
-            body["reasoning_effort"] = thinking_strength.lower()
+            strength = thinking_strength.lower()
+            body["reasoning_effort"] = _THINKING_MAP.get(strength, strength)
             body.pop("temperature", None)
         elif getattr(self.config, 'thinking_disabled', False):
             body["extra_body"] = {"thinking": {"type": "disabled"}}
