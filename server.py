@@ -324,60 +324,71 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
         self._json_response({"workspace": str(p), "ok": True})
 
     def _handle_shell(self):
-        """Execute a PowerShell command and stream output via SSE."""
+        """Interactive PowerShell — persistent session with SSE streaming output."""
         body = self._read_body()
+        sid = body.get("session", "")
         command = body.get("command", "")
-        if not command:
-            self._error(400, "Missing 'command' field")
+        action = body.get("action", "send")
+
+        # Open new session
+        if action == "open":
+            sid = shell_open(self.config.agent.workspace_dir)
+            self._json_response({"session": sid, "prompt": f"PS {self.config.agent.workspace_dir}> "})
             return
 
-        print(f"\n💻 [shell] {command[:120]}", flush=True)
+        # Close session
+        if action == "close":
+            shell_close(sid)
+            self._json_response({"ok": True})
+            return
 
-        # SSE headers
+        # Send command to persistent session
+        if not command:
+            self._error(400, "Missing 'command'")
+            return
+        if not sid:
+            self._error(400, "Missing 'session'. Open a session first.")
+
+        print(f"💻 [{sid[:6]}] {command[:120]}", flush=True)
+
+        proc, queue, lock = shell_ensure(sid, self.config.agent.workspace_dir)
+        if not proc:
+            self._error(500, "Shell process not running")
+            return
+
+        # Drain any pending output before sending command
+        with lock:
+            while not queue.empty():
+                try: queue.get_nowait()
+                except: break
+            proc.stdin.write(command + "\n")
+            proc.stdin.flush()
+
+        # Stream output via SSE
         self.send_response(200)
         self._cors()
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
 
-        try:
-            proc = subprocess.Popen(
-                ["powershell.exe", "-NoProfile", "-Command", command],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                cwd=self.config.agent.workspace_dir,
-            )
+        deadline = time.time() + 30
+        collected = ""
+        while time.time() < deadline:
+            try:
+                line = queue.get(timeout=0.15)
+                collected += line
+                self.wfile.write(
+                    f"data: {json.dumps({'text': line})}\n\n".encode("utf-8")
+                )
+                self.wfile.flush()
+                # A PowerShell prompt in the output means the command finished
+                if _looks_like_prompt(line) and len(collected) > 50:
+                    break
+            except Exception:
+                pass
 
-            for line in proc.stdout:
-                if line.strip():
-                    self.wfile.write(
-                        f"data: {json.dumps({'text': line})}\n\n".encode("utf-8")
-                    )
-                    self.wfile.flush()
-
-            proc.wait(timeout=30)
-            exit_code = proc.returncode
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            exit_code = -1
-            self.wfile.write(
-                f"data: {json.dumps({'text': '[TIMEOUT] Command exceeded 30s limit\\n'})}\n\n".encode("utf-8")
-            )
-            self.wfile.flush()
-        except Exception as e:
-            exit_code = -1
-            self.wfile.write(
-                f"data: {json.dumps({'text': f'[ERROR] {e}\\n'})}\n\n".encode("utf-8")
-            )
-            self.wfile.flush()
-
-        self.wfile.write(
-            f"event: done\ndata: {json.dumps({'exit': exit_code})}\n\n".encode("utf-8")
-        )
+        self.wfile.write(f"event: done\ndata: {json.dumps({'done': True})}\n\n".encode("utf-8"))
         self.wfile.flush()
-        print(f"💻 [shell] exit={exit_code}", flush=True)
 
     def _serve_spa(self):
         """Serve the single-page web UI."""
@@ -631,6 +642,66 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
 # ═══════════════════════════════════════════════════════════════════════════════
 # Server factory
 # ═══════════════════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Persistent PowerShell sessions for interactive terminal
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_shell_sessions: dict[str, tuple[subprocess.Popen, "queue.Queue[str]", threading.Lock]] = {}
+_shell_lock = threading.Lock()
+
+def shell_open(cwd: str) -> str:
+    """Start a persistent PowerShell process. Returns session ID."""
+    import queue
+    sid = uuid.uuid4().hex[:10]
+    out_queue: queue.Queue[str] = queue.Queue()
+
+    proc = subprocess.Popen(
+        ["powershell.exe", "-NoLogo", "-NoExit", "-Command",
+         f"cd '{cwd}'; function prompt {{ 'PS ' + (Get-Location).Path + '> ' }}"],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, text=True, bufsize=1, cwd=cwd,
+    )
+
+    def _reader():
+        for line in proc.stdout:
+            out_queue.put(line)
+
+    threading.Thread(target=_reader, daemon=True).start()
+
+    with _shell_lock:
+        _shell_sessions[sid] = (proc, out_queue, threading.Lock())
+    print(f"💻 Shell opened: {sid}", flush=True)
+    return sid
+
+def shell_ensure(sid: str, cwd: str):
+    """Get or create a shell session."""
+    with _shell_lock:
+        if sid in _shell_sessions:
+            return _shell_sessions[sid]
+    # Auto-create
+    shell_open(cwd)
+    with _shell_lock:
+        return _shell_sessions.get(sid, (None, None, None))
+
+def shell_close(sid: str):
+    with _shell_lock:
+        entry = _shell_sessions.pop(sid, None)
+    if entry:
+        proc, _, _ = entry
+        try:
+            proc.stdin.write("exit\n")
+            proc.stdin.flush()
+            proc.wait(timeout=3)
+        except Exception:
+            proc.kill()
+        print(f"💻 Shell closed: {sid}", flush=True)
+
+def _looks_like_prompt(line: str) -> bool:
+    """Heuristic: does this line look like a PowerShell prompt?"""
+    s = line.strip()
+    return (s.startswith("PS ") and ">" in s) or s == ">"
+
 
 def create_server(
     config: AppConfig | None = None,

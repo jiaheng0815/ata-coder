@@ -555,26 +555,48 @@ document.getElementById('input').addEventListener('input', function() {
 });
 
 /* ═══════════════════════════ Terminal ═══════════════════════════ */
-function toggleTerm() {
+let shellSession = '';
+let shellBusy = false;
+
+async function toggleTerm() {
     const p = document.getElementById('term-panel');
     p.classList.toggle('open');
-    if (p.classList.contains('open')) document.getElementById('term-input').focus();
+    if (p.classList.contains('open')) {
+        document.getElementById('term-input').focus();
+        if (!shellSession) await openShell();
+    }
+}
+async function openShell() {
+    const out = document.getElementById('term-output');
+    try {
+        const r = await fetch(HOST + '/api/shell', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({action: 'open'}),
+        });
+        const d = await r.json();
+        shellSession = d.session;
+        out.textContent = 'Connected to remote PowerShell.\n' + d.prompt + ' ';
+    } catch(e) {
+        out.textContent = `Failed to connect: ${e.message}\n`;
+    }
 }
 async function runShell() {
     const input = document.getElementById('term-input');
     const out = document.getElementById('term-output');
     const cmd = input.value.trim();
-    if (!cmd) return;
+    if (!cmd || shellBusy) return;
+    if (!shellSession) { await openShell(); if (!shellSession) return; }
     input.value = '';
-    out.textContent += `\nPS> ${cmd}\n`;
+    out.textContent += cmd + '\n';
     out.scrollTop = out.scrollHeight;
+    shellBusy = true;
 
     try {
         const r = await fetch(HOST + '/api/shell', {
             method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({command: cmd}),
+            body: JSON.stringify({session: shellSession, command: cmd}),
         });
-        if (!r.ok) { out.textContent += `HTTP ${r.status}\n`; return; }
+        if (!r.ok) { out.textContent += `HTTP ${r.status}\n`; shellBusy = false; return; }
 
         const reader = r.body.getReader();
         const decoder = new TextDecoder();
@@ -590,17 +612,20 @@ async function runShell() {
                 try {
                     const ev = JSON.parse(line.slice(6));
                     if (ev.text) { out.textContent += ev.text; }
-                    if (ev.exit !== undefined) {
-                        out.textContent += ev.exit === 0 ? '' : `\n[exit code: ${ev.exit}]`;
-                    }
                 } catch(e) {}
             }
             out.scrollTop = out.scrollHeight;
         }
     } catch(e) {
         out.textContent += `[ERROR] ${e.message}\n`;
+        shellSession = ''; // Reconnect on next command
     }
+    shellBusy = false;
     out.scrollTop = out.scrollHeight;
+    // Trim old output to prevent memory issues
+    if (out.textContent.length > 50000) {
+        out.textContent = out.textContent.slice(-30000);
+    }
 }
 
 // Show connection type
