@@ -97,7 +97,7 @@ body {
     padding: 4px 10px; background: var(--bg-panel); border-radius: 4px;
     display: inline-block;
 }
-.thinking { color: var(--yellow); font-style: italic; font-size: 13px; }
+.thinking { color: var(--comment); font-style: italic; font-size: 12px; margin: 4px 0; }
 .typing { color: var(--cyan); }
 .typing::after { content: '▊'; animation: blink 0.8s infinite; }
 @keyframes blink { 50% { opacity: 0; } }
@@ -396,21 +396,38 @@ async function send() {
                 if (data === '[DONE]') continue;
                 try {
                     const ev = JSON.parse(data);
-                    if (ev.text) {
-                        fullText += ev.text;
+                    if (!ev || !ev.type) continue;
+                    switch (ev.type) {
+                    case 'text':
+                        fullText += (ev.text || '');
                         currentMsg.innerHTML = renderMarkdown(fullText);
-                    }
-                    if (ev.tool) {
-                        const tc = document.createElement('div');
-                        tc.className = 'tool-call';
-                        tc.textContent = `🔧 ${ev.tool}`;
-                        currentMsg.appendChild(tc);
-                    }
-                    if (ev.thinking) {
+                        break;
+                    case 'thinking':
                         const th = document.createElement('div');
                         th.className = 'thinking';
-                        th.textContent = ev.thinking;
+                        th.textContent = '💭 ' + (ev.text || '');
                         currentMsg.appendChild(th);
+                        break;
+                    case 'tool_call':
+                        const tc = document.createElement('div');
+                        tc.className = 'tool-call';
+                        tc.textContent = '🔧 ' + (ev.tool || 'tool');
+                        currentMsg.appendChild(tc);
+                        break;
+                    case 'tool_result':
+                        const tr = document.createElement('div');
+                        tr.className = 'tool-call';
+                        tr.textContent = (ev.ok ? '✓' : '✗') + ' ' + (ev.tool || '');
+                        tr.style.color = ev.ok ? 'var(--green)' : 'var(--red)';
+                        currentMsg.appendChild(tr);
+                        break;
+                    case 'error':
+                        const er = document.createElement('div');
+                        er.className = 'tool-call';
+                        er.style.color = 'var(--red)';
+                        er.textContent = '❌ ' + (ev.error || '');
+                        currentMsg.appendChild(er);
+                        break;
                     }
                 } catch(e) {}
             }

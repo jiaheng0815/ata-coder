@@ -515,13 +515,24 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
         while thread.is_alive() or last_idx < len(events):
             with events_lock:
                 while last_idx < len(events):
-                    evt_type, data = events[last_idx]
+                    evt_type, payload = events[last_idx]
                     last_idx += 1
-                    if isinstance(data, str):
-                        # Text delta — send as SSE data only
-                        line = f"event: {evt_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+                    # Wrap all events as {type: ..., ...} for the frontend
+                    if evt_type == "text":
+                        sse_data = json.dumps({"type": "text", "text": payload}, ensure_ascii=False)
+                    elif evt_type == "thinking":
+                        sse_data = json.dumps({"type": "thinking", "text": payload}, ensure_ascii=False)
+                    elif evt_type == "tool_call":
+                        sse_data = json.dumps({"type": "tool_call", "tool": payload["name"], "args": _brief_dict(payload.get("arguments", {}))}, ensure_ascii=False)
+                    elif evt_type == "tool_result":
+                        sse_data = json.dumps({"type": "tool_result", "tool": payload["name"], "ok": payload["success"], "output": payload.get("output", "")}, ensure_ascii=False)
+                    elif evt_type == "error":
+                        sse_data = json.dumps({"type": "error", "error": payload.get("error", "")}, ensure_ascii=False)
+                    elif evt_type == "complete":
+                        sse_data = json.dumps({"type": "complete", "tools": payload["tool_calls"], "time": payload["time"]}, ensure_ascii=False)
                     else:
-                        line = f"event: {evt_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+                        sse_data = json.dumps(payload, ensure_ascii=False)
+                    line = f"event: {evt_type}\ndata: {sse_data}\n\n"
                     try:
                         self.wfile.write(line.encode("utf-8"))
                         self.wfile.flush()
