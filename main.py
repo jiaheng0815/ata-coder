@@ -149,6 +149,100 @@ def _apply_config_overrides(config: AppConfig, kwargs: dict) -> str:
     return explicit_model
 
 
+# ── First-run setup ────────────────────────────────────────────────────────
+
+def _ensure_first_run() -> None:
+    """Check ~/.ata_coder exists; if not, guide user through initial setup."""
+    settings_dir = Path.home() / ".ata_coder"
+    settings_file = settings_dir / "settings.json"
+
+    if settings_file.exists():
+        return  # Already configured
+
+    print()
+    print("=" * 56)
+    print("  Welcome to ATA Coder — First Run Setup")
+    print("=" * 56)
+    print()
+    print("  No configuration found. Let's set up your API connection.")
+    print()
+
+    # ── API Base URL ────────────────────────────────────
+    default_url = "https://api.deepseek.com"
+    print(f"  API Base URL [default: {default_url}]:")
+    try:
+        base_url = input("  > ").strip()
+    except (KeyboardInterrupt, EOFError):
+        print("\n  Setup cancelled. Run 'ata' again when ready.")
+        sys.exit(0)
+    if not base_url:
+        base_url = default_url
+
+    # ── API Key ─────────────────────────────────────────
+    print()
+    print("  API Key (input will be hidden):")
+    try:
+        import sys as _sys
+        if os.name == "nt":
+            import msvcrt
+            api_key_parts: list[str] = []
+            while True:
+                ch = msvcrt.getch()
+                if ch in (b"\r", b"\n"):
+                    break
+                if ch == b"\x08":  # backspace
+                    if api_key_parts:
+                        api_key_parts.pop()
+                elif ch == b"\x03":  # Ctrl+C
+                    print("\n  Setup cancelled.")
+                    sys.exit(0)
+                else:
+                    api_key_parts.append(ch.decode("utf-8", errors="replace"))
+            api_key = "".join(api_key_parts)
+        else:
+            import tty
+            import termios
+            fd = _sys.stdin.fileno()
+            old = termios.tcgetattr(fd)
+            try:
+                tty.setraw(fd)
+                api_key = ""
+                while True:
+                    ch = _sys.stdin.read(1)
+                    if ch in ("\r", "\n"):
+                        break
+                    if ch == "\x03":
+                        print("\n  Setup cancelled.")
+                        sys.exit(0)
+                    api_key += ch
+            finally:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old)
+    except (KeyboardInterrupt, EOFError):
+        print("\n  Setup cancelled.")
+        sys.exit(0)
+    print()
+
+    if not api_key.strip():
+        print("  ⚠ No API key provided. You can set ATA_CODER_API_KEY later.")
+        print()
+
+    # ── Write settings ──────────────────────────────────
+    settings_dir.mkdir(parents=True, exist_ok=True)
+    import json as _json
+    settings_data = {
+        "api": {
+            "base_url": base_url,
+            "api_key": api_key.strip(),
+        },
+    }
+    settings_file.write_text(
+        _json.dumps(settings_data, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    print(f"  ✓ Settings saved to {settings_file}")
+    print()
+
+
 # ── Interactive mode ────────────────────────────────────────────────────
 
 def run_interactive(config: AppConfig, **kwargs):
@@ -435,7 +529,7 @@ def _parse_command(user_input: str) -> tuple:
 # ═════════════════════════════════════════════════════════════════════════
 
 def _setup(config, kwargs):
-    """Shared bootstrap: UTF-8, logging, config overrides, validation."""
+    """Shared bootstrap: first-run check, UTF-8, logging, config, validation."""
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
@@ -445,6 +539,9 @@ def _setup(config, kwargs):
         level=log_level,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
+
+    # First-run setup: prompt for API config if ~/.ata_coder is missing
+    _ensure_first_run()
 
     from .settings import init_settings
     init_settings()
