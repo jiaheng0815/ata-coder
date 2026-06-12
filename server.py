@@ -39,9 +39,7 @@ sys.path.insert(0, str(Path(__file__).parent.resolve()))
 from .config import AppConfig, get_config
 from .agent import CoderAgent
 from .tools import ToolExecutor, TOOL_DEFINITIONS
-from .skills import get_skill_manager
-from .memory import get_memory_store
-from .project import ProjectDetector
+from .agent_subsystems import AgentSubsystems
 from .permissions import PermissionStore, PermissionMode
 
 logger = logging.getLogger(__name__)
@@ -63,11 +61,9 @@ class SessionStore:
         sid = str(uuid.uuid4())[:12]
 
         tool_exec = ToolExecutor(config.agent)
-        perms = PermissionStore(config.agent.workspace_dir)
-        skill_mgr = get_skill_manager()
 
-        if skill:
-            skill_mgr.activate(skill)
+        # Build AgentSubsystems container (replaces loose kwargs)
+        perms = PermissionStore(config.agent.workspace_dir)
 
         # API mode: default to allow (caller implements own auth)
         if os.environ.get("ATA_CODER_ALLOW_ALL", "").lower() in ("1", "true", "yes"):
@@ -76,13 +72,25 @@ class SessionStore:
         else:
             perms.set_prompt_callback(lambda n, a, c: True)
 
+        from .skills import get_skill_manager
+        from .memory import get_memory_store
+        from .project import ProjectDetector
+
+        skill_mgr = get_skill_manager()
+        if skill:
+            skill_mgr.activate(skill)
+
+        subsystems = AgentSubsystems(
+            skills=skill_mgr,
+            memory=get_memory_store(),
+            permissions=perms,
+            project_info=ProjectDetector(config.agent.workspace_dir).detect(),
+        )
+
         agent = CoderAgent(
             config=config,
             tool_executor=tool_exec,
-            skill_manager=skill_mgr,
-            memory_store=get_memory_store(),
-            permission_store=perms,
-            project_info=ProjectDetector(config.agent.workspace_dir).detect(),
+            subsystems=subsystems,
         )
 
         with self._lock:
@@ -150,6 +158,26 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
         """Suppress default logging; use our logger."""
         logger.debug("%s - %s", self.client_address[0], format % args)
 
+    # ── Auth ────────────────────────────────────────────────────────────
+
+    def _check_auth(self) -> bool:
+        """Verify API token if ATA_CODER_API_TOKEN is configured."""
+        expected = os.environ.get("ATA_CODER_API_TOKEN", "")
+        if not expected:
+            return True  # no token configured → allow all (backward compat)
+        token = (self.headers.get("Authorization", "")
+                 .removeprefix("Bearer ").strip())
+        return token == expected
+
+    def _require_auth(self, method_name: str) -> bool:
+        """Check auth and send 403 if invalid. Returns True if ok."""
+        if self._check_auth():
+            return True
+        self._error(403, "Invalid or missing API token. "
+                   "Set ATA_CODER_API_TOKEN env var on the server, "
+                   "then send Authorization: Bearer <token> header.")
+        return False
+
     # ── CORS ────────────────────────────────────────────────────────────
 
     def _cors(self):
@@ -206,6 +234,8 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
             self._error(404, f"Not found: {self.path}")
 
     def do_POST(self):
+        if not self._require_auth("POST"):
+            return
         if self.path == "/chat":
             self._handle_chat()
         elif self.path == "/chat/stream":
@@ -214,6 +244,8 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
             self._error(404, f"Not found: {self.path}")
 
     def do_DELETE(self):
+        if not self._require_auth("DELETE"):
+            return
         parts = self._path_parts()
         if len(parts) == 2 and parts[0] == "sessions":
             self._handle_delete_session(parts[1])

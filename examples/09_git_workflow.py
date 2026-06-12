@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Example 09: Git Workflow — auto-commit, branch, undo with colored output."""
 import sys; sys.path.insert(0, str(__import__('pathlib').Path(__file__).parent.parent))
 import os

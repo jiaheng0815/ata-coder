@@ -210,6 +210,39 @@ class MemoryStore:
         logger.info("Saved memory: %s", memory.name)
         return memory
 
+    def save_batch(self, memories: list[Memory]) -> list[Memory]:
+        """
+        Save multiple memories efficiently — writes index only once.
+
+        For bulk operations (seeding, importing, syncing), this is
+        significantly faster than calling save() repeatedly.
+        """
+        for memory in memories:
+            file_path = self.memory_dir / memory.file_path
+            try:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(memory.to_frontmatter())
+            except Exception as e:
+                logger.error("Failed to write memory file %s: %s", file_path, e)
+                continue
+            self._memories[memory.name] = memory
+        # Rebuild and write index once
+        self._rebuild_index()
+        logger.info("Batch saved %d memories", len(memories))
+        return memories
+
+    def _rebuild_index(self) -> None:
+        """Rebuild the index from all loaded memories (batch-safe)."""
+        self._index_entries = [
+            f"- [{m.description}]({m.file_path})"
+            for m in self._memories.values()
+        ]
+        self._write_index()
+
+    def flush(self) -> None:
+        """Force-write the index to disk (call before shutdown)."""
+        self._rebuild_index()
+
     def get(self, name: str) -> Memory | None:
         """Get a memory by name (slug)."""
         return self._memories.get(name)

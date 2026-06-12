@@ -429,16 +429,77 @@ def build_registry() -> CommandRegistry:
         print(f"Saved: {ctx['agent'].save_session(arg)}")
         return True
 
-    @r.register("/sessions", "List sessions", "session")
-    def cmd_sessions(arg: str, ctx: dict) -> bool:
+    @r.register("/sessions", "List all sessions", "session")
+    @r.register("/history", "Search/browse history", "session")
+    def cmd_history(arg: str, ctx: dict) -> bool:
         sm = ctx.get("session_mgr")
-        if sm:
-            ctx["ui"].show_sessions(sm.list_sessions())
-        else:
-            print("Not available.")
+        if not sm:
+            print("Session manager not available.")
+            return True
+
+        # Get current workspace for filtering
+        agent = ctx["agent"]
+        ws = getattr(agent.tools, "workspace", None)
+        workspace = str(ws) if ws else None
+
+        if arg:
+            # Try to resume by index number
+            if arg.isdigit():
+                sessions = sm.list_sessions(limit=50, workspace=workspace)
+                idx = int(arg) - 1
+                if 0 <= idx < len(sessions):
+                    meta = sessions[idx]
+                    msgs = sm.load(meta.id)
+                    if msgs:
+                        agent._state.messages = msgs
+                        print(f"Resumed: {meta.id}")
+                        print(f"  {meta.summary[:100]}")
+                        print(f"  Messages: {len(msgs)}, Tools: {meta.tool_call_count}")
+                        return True
+                print(f"No session at index {arg} (found {len(sessions)} sessions)")
+                return True
+
+            # Try to resume by session ID
+            msgs = sm.load(arg)
+            if msgs:
+                agent._state.messages = msgs
+                meta = sm.get_meta(arg)
+                print(f"Resumed: {arg} ({len(msgs)} msgs)")
+                if meta:
+                    print(f"  {meta.summary[:100]}")
+            else:
+                # Search by keyword
+                results = sm.search_sessions(arg, workspace=workspace)
+                if results:
+                    print(f"Search '{arg}': {len(results)} matches")
+                    for i, meta in enumerate(results[:10], 1):
+                        date = meta.created[:10] if meta.created else "?"
+                        print(f"  [{i}] {date} | {meta.skill:15s} | {meta.summary[:60]}")
+                else:
+                    print(f"No matches for: {arg}")
+            return True
+
+        # No args — list recent sessions for this workspace
+        sessions = sm.list_sessions(limit=20, workspace=workspace)
+        ws_name = Path(workspace).name if workspace else "all"
+
+        if not sessions:
+            print(f"No sessions for workspace: {ws_name}")
+            print("Try /history <keyword> to search all sessions.")
+            return True
+
+        print(f"History ({ws_name}/):")
+        for i, meta in enumerate(sessions, 1):
+            date = meta.created[:10] if meta.created else "?"
+            icon = {"general-coder": "💻", "debugger": "🐛", "code-reviewer": "🔍",
+                    "architect": "🏗️", "test-writer": "🧪"}.get(meta.skill, "📝")
+            print(f"  [{i}] {icon} {date} | {meta.skill:15s} | {meta.summary[:60]}")
+            if meta.tool_call_count:
+                print(f"      {meta.message_count} msgs, {meta.tool_call_count} tools")
+        print(f"\n/history <number> to resume, /history <keyword> to search")
         return True
 
-    @r.register("/resume", "Resume session", "session")
+    @r.register("/resume", "Resume session by ID", "session")
     def cmd_resume(arg: str, ctx: dict) -> bool:
         sm = ctx.get("session_mgr")
         if not sm or not arg:
@@ -664,6 +725,85 @@ def build_registry() -> CommandRegistry:
         print(f"\n  [{status}] {summary}")
         return True
 
+    # ── Extensions ─────────────────────────────────────────────────────
+
+    @r.register("/extensions", "List extensions", "extension")
+    def cmd_extensions(arg: str, ctx: dict) -> bool:
+        agent = ctx["agent"]
+        if not hasattr(agent, "ext_mgr") or not agent.ext_mgr:
+            print("Extension manager not available.")
+            return True
+        active_names = {e.meta.name for e in agent.ext_mgr.list_active()}
+        for ext in agent.ext_mgr.list_extensions():
+            status = "[active]" if ext.meta.name in active_names else "[loaded]"
+            print(f"  {status} {ext.meta.name} v{ext.meta.version} — {ext.meta.description[:60]}")
+        return True
+
+    @r.register("/ext-activate", "Activate extension", "extension")
+    def cmd_ext_activate(arg: str, ctx: dict) -> bool:
+        if not arg:
+            print("Usage: /ext-activate <name>")
+            return True
+        agent = ctx["agent"]
+        if not hasattr(agent, "ext_mgr") or not agent.ext_mgr:
+            print("Extension manager not available.")
+            return True
+        ok = agent.ext_mgr.activate(arg)
+        print(f"Activated: {arg}" if ok else f"Failed: {arg}")
+        return True
+
+    @r.register("/ext-deactivate", "Deactivate extension", "extension")
+    def cmd_ext_deactivate(arg: str, ctx: dict) -> bool:
+        if not arg:
+            print("Usage: /ext-deactivate <name>")
+            return True
+        agent = ctx["agent"]
+        if not hasattr(agent, "ext_mgr") or not agent.ext_mgr:
+            print("Extension manager not available.")
+            return True
+        ok = agent.ext_mgr.deactivate(arg)
+        print(f"Deactivated: {arg}" if ok else f"Failed: {arg}")
+        return True
+
+    # ── Sub-agents ─────────────────────────────────────────────────────
+
+    @r.register("/sub-agents", "List sub-agents", "subagent")
+    def cmd_sub_agents(arg: str, ctx: dict) -> bool:
+        agent = ctx["agent"]
+        mgr = getattr(agent, "_sub_agent_mgr", None)
+        if not mgr:
+            print("SubAgentManager not available.")
+            return True
+        agents = mgr.list_all()
+        if not agents:
+            print("No sub-agents.")
+            return True
+        icons = {"running": "R", "done": "D", "failed": "F", "cancelled": "C", "idle": "I"}
+        for a in agents:
+            icon = icons.get(a.status, "?")
+            print(f"  [{icon}] {a.id} — {a.status} (tool_calls={a.tool_call_count})")
+            if a.status == "done" and a.result:
+                print(f"       result: {a.result[:100]}...")
+        return True
+
+    @r.register("/sub-cancel", "Cancel sub-agent", "subagent")
+    def cmd_sub_cancel(arg: str, ctx: dict) -> bool:
+        if not arg:
+            print("Usage: /sub-cancel <agent_id|all>")
+            return True
+        agent = ctx["agent"]
+        mgr = getattr(agent, "_sub_agent_mgr", None)
+        if not mgr:
+            print("SubAgentManager not available.")
+            return True
+        if arg == "all":
+            mgr.cancel_all()
+            print("All sub-agents cancelled.")
+        else:
+            ok = mgr.cancel(arg)
+            print(f"Cancelled: {arg}" if ok else f"Not found: {arg}")
+        return True
+
     return r
 
 
@@ -714,7 +854,8 @@ _COMMAND_LIST: list[tuple[str, str]] = [
     ("/template",       "Render template"),
     # Sessions
     ("/save",           "Save session"),
-    ("/sessions",       "List sessions"),
+    ("/history",        "Browse/search history"),
+    ("/sessions",       "List all sessions"),
     ("/resume",         "Resume session"),
     ("/export",         "Export session"),
     # Git
@@ -733,6 +874,13 @@ _COMMAND_LIST: list[tuple[str, str]] = [
     # Test
     ("/test",           "Run project tests"),
     ("/test-fix",       "Run tests + auto-fix"),
+    # Extensions
+    ("/extensions",     "List extensions"),
+    ("/ext-activate",   "Activate extension"),
+    ("/ext-deactivate", "Deactivate extension"),
+    # Sub-agents
+    ("/sub-agents",     "List sub-agents"),
+    ("/sub-cancel",     "Cancel sub-agent"),
 ]
 
 

@@ -3,7 +3,6 @@
 {{% if skill_description %}}
 Role: {{ skill_description }}
 {{% endif %}}
-
 You are working in the following environment:
 
 - Workspace: {{ workspace }}

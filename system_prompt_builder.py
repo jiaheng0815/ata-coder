@@ -69,12 +69,35 @@ class SystemPromptBuilder:
     # ── Sections ──────────────────────────────────────────────────────────
 
     def _get_base_prompt(self) -> str:
-        """Obtain the base prompt from the active skill or default."""
+        """Obtain the base prompt from active Skills via ExtensionManager, or fallback."""
+        # ── Primary path: ExtensionManager aggregates all active skill extensions ──
+        if self.subsys.has_extensions and self.subsys.extensions:
+            # Get all active skill-tagged extensions
+            skill_exts = [
+                e for e in self.subsys.extensions.list_active()
+                if "skill" in e.meta.tags
+            ]
+            if skill_exts:
+                # Aggregate all skill prompts by priority
+                aggregated = self.subsys.extensions.aggregate_prompts(base_prompt="")
+                if aggregated.strip():
+                    # Trigger extension point for prompt modification
+                    if hasattr(self.subsys.extensions, 'extension_point'):
+                        ep = self.subsys.extensions.extension_point("on_system_prompt_build")
+                        results = ep.trigger(
+                            prompt=aggregated, task=getattr(self, '_last_task', "")
+                        )
+                        # Allow interceptors to replace the prompt
+                        for r in results:
+                            if r is not None:
+                                return r
+                    return aggregated
+
+        # ── Fallback: direct skill manager (backward compat) ──────────────────
         if self.subsys.has_skills:
-            skill = self.subsys.skills.active_skill
+            skill = getattr(self.subsys.skills, 'active_skill', None)
             if skill:
                 return skill.system_prompt
-            # Try the manager's global fallback
             try:
                 return self.subsys.skills.get_system_prompt()
             except Exception:
@@ -82,12 +105,13 @@ class SystemPromptBuilder:
         return self.default_prompt
 
     def _environment_section(self) -> str:
+        model_line = f"\n- Model: {self.model}" if self.model else ""
         return f"""
 
 ## Environment
 - Working directory: {self.workspace}
 - OS: {platform.system()} {platform.release()}
-- Python: {platform.python_version()}
+- Python: {platform.python_version()}{model_line}
 - Date: {time.strftime('%Y-%m-%d')}"""
 
     def _project_section(self) -> str:

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Example 06: Fool-Proof System — safety, undo, dry-run with colored output."""
 import sys; sys.path.insert(0, str(__import__('pathlib').Path(__file__).parent.parent))
 import os

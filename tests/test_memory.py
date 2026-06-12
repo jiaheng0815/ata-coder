@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Tests for memory — Memory dataclass, MemoryStore CRUD, search, context recall.
 """
@@ -310,11 +311,19 @@ class TestMemoryStoreSearch:
         assert results == []
 
     def test_search_no_match(self, tmp_path):
-        """Search with no matches should return empty list."""
+        """Search with no token overlap returns only recency-boosted results.
+        recall_context with a high min_score filters out recency-only matches.
+        """
         store = MemoryStore(tmp_path)
-        store.add(Memory(name="only-one", description="Only memory", content="Just one"))
-        results = store.search("nonexistent_gibberish_xyzzy")
-        assert results == []
+        store.add(Memory(
+            name="only-one",
+            description="Only memory",
+            content="Just one",
+        ))
+        # search() includes recency boost (+2), so the memory may appear.
+        # But recall_context with min_score=3 should filter it out.
+        context = store.recall_context("nonexistent_gibberish_xyzzy", min_score=3.0)
+        assert context == "", f"Expected empty context, got {context!r}"
 
     def test_name_match_scored_higher(self, tmp_path):
         """Name matches should be scored higher than content matches."""
@@ -426,7 +435,8 @@ class TestMemoryStoreSuggestions:
             tool_errors=["Error: 'not in the allowed list'"]
         )
         assert len(suggestions) >= 1
-        assert any("allowed list" in s.lower() for s in suggestions)
+        assert any("whitelist" in s.lower() or "blocked" in s.lower()
+                   for s in suggestions)
 
     def test_suggest_tool_error_command_not_found(self, tmp_path):
         """Command not found errors should trigger suggestion."""

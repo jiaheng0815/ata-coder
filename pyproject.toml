@@ -13,11 +13,13 @@ authors = [
     {name = "ATA Coder Team"}
 ]
 dependencies = [
+    "click>=8.0",
     "httpx>=0.27.0",
     "colorama>=0.4.6",
     "python-dotenv>=1.0.0",
     "rich>=13.0.0",
     "pyyaml>=6.0",
+    "prompt-toolkit>=3.0",
 ]
 
 [project.scripts]
@@ -36,4 +38,7 @@ packages = ["ata_coder"]
 ata_coder = "."
 
 [tool.setuptools.package-data]
-ata_coder = ["codecraft_prompt.txt"]
+ata_coder = ["skills/*.md", "prompts/*.md"]
+
+[tool.setuptools.exclude-package-data]
+ata_coder = ["tests/*", "examples/*", "__pycache__/*", "*.pyc"]

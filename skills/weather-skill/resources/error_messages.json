@@ -1,0 +1,7 @@
+{
+  "city_not_found": "City '{{city}}' not found. Check spelling or try a nearby major city.",
+  "api_error": "Weather service temporarily unavailable ({{detail}}). Try again later.",
+  "no_network": "Network access required for weather queries.",
+  "invalid_units": "Units must be 'celsius' or 'fahrenheit', got '{{units}}'.",
+  "forecast_range": "Forecast days must be between 1 and 7, got {{days}}."
+}

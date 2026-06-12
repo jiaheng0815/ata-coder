@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Example 01: Basic Chat — colored output with DeepSeek API."""
 import sys; sys.path.insert(0, str(__import__('pathlib').Path(__file__).parent.parent))
 import os

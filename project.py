@@ -47,25 +47,6 @@ LANGUAGE_DETECTORS: dict[str, list[str]] = {
     "Lua": ["*.rockspec"],
 }
 
-# File patterns → framework
-FRAMEWORK_DETECTORS: dict[str, list[str]] = {
-    "React": ["src/App.jsx", "src/App.tsx", "next.config.js", "next.config.ts"],
-    "Next.js": ["next.config.js", "next.config.ts", "next.config.mjs"],
-    "Vue": ["vue.config.js", "vite.config.js", "vite.config.ts"],
-    "Nuxt": ["nuxt.config.js", "nuxt.config.ts"],
-    "Svelte": ["svelte.config.js"],
-    "Angular": ["angular.json"],
-    "Django": ["manage.py", "wsgi.py"],
-    "Flask": ["app.py"],
-    "FastAPI": ["main.py"],
-    "Spring Boot": ["Application.java", "application.properties", "application.yml"],
-    "Express": ["app.js"],
-    "Gin": ["router.go"],
-    "Rocket": ["Cargo.toml"],
-    "Laravel": ["artisan"],
-    "Rails": ["config/routes.rb", "app/controllers"],
-    "Phoenix": ["mix.exs"],
-}
 
 # File patterns → build system
 BUILD_DETECTORS: dict[str, list[str]] = {
@@ -198,7 +179,6 @@ class ProjectDetector:
         # Unified detection pass — run all detectors in one loop
         _DETECTOR_TARGETS: list[tuple[dict[str, list[str]], list[str]]] = [
             (LANGUAGE_DETECTORS, info.languages),
-            (FRAMEWORK_DETECTORS, info.frameworks),
             (BUILD_DETECTORS, info.build_systems),
             (TEST_DETECTORS, info.test_frameworks),
         ]

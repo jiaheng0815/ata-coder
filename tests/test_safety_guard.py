@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Tests for safety_guard — risk assessment, path traversal, shell commands, etc.
 """
@@ -78,7 +79,11 @@ class TestCheckWriteFile:
     def test_outside_workspace(self, tmp_path):
         """Absolute path outside workspace should be CRITICAL."""
         guard = SafetyGuard(tmp_path)
-        check = guard.check_write_file("/tmp/outside.txt", "content")
+        # Use a path that's definitely absolute and outside workspace
+        outside_path = os.path.join(os.path.dirname(os.path.dirname(str(tmp_path))), "outside.txt")
+        if not os.path.isabs(outside_path):
+            outside_path = "C:\\Windows\\Temp\\outside_test.txt"
+        check = guard.check_write_file(outside_path, "content")
         assert check.allowed is False
         assert check.risk == RiskLevel.CRITICAL
 

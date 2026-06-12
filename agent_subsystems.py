@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from .extension import ExtensionManager
     from .skills import SkillManager
     from .memory import MemoryStore
     from .mcp_client import MCPClient
@@ -36,6 +37,7 @@ class AgentSubsystems:
     permissions: PermissionStore | None = None
     project_info: ProjectInfo | None = None
     sessions: SessionManager | None = None
+    extensions: ExtensionManager | None = None
 
     @property
     def has_skills(self) -> bool:
@@ -64,3 +66,7 @@ class AgentSubsystems:
     @property
     def has_sessions(self) -> bool:
         return self.sessions is not None
+
+    @property
+    def has_extensions(self) -> bool:
+        return self.extensions is not None

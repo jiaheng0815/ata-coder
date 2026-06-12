@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Example 03: Code Search — grep, read, analyze with colored output."""
 import sys; sys.path.insert(0, str(__import__('pathlib').Path(__file__).parent.parent))
 import os
@@ -30,7 +31,9 @@ def main():
         perms.set_category_rule("write", PermissionMode.ALLOW)
         perms.set_category_rule("shell", PermissionMode.ALLOW)
 
-        agent = CoderAgent(config=config, tool_executor=ToolExecutor(config.agent), permission_store=perms)
+        from agent_subsystems import AgentSubsystems
+        agent = CoderAgent(config=config, tool_executor=ToolExecutor(config.agent),
+                           subsystems=AgentSubsystems(permissions=perms))
         task = f"Search {ws}/src for issues. Grep for password, TODO, BUG, plaintext. Read files, list issues with severity."
         print(f"  {dim('Files:')} src/models.py, src/handlers.py")
         print(f"  {dim('Task:')} grep + read + analyze\n")

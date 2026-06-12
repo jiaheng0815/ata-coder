@@ -1,0 +1,2 @@
+# Math Calculator — no external dependencies
+# Uses only Python stdlib (math, re)

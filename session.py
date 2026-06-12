@@ -227,23 +227,39 @@ class SessionManager:
         """Get session metadata."""
         return self._index.get(session_id)
 
-    def list_sessions(self, limit: int = 20) -> list[SessionMeta]:
-        """List all sessions, newest first."""
-        sessions = sorted(
-            self._index.values(),
-            key=lambda m: m.updated,
-            reverse=True,
-        )
-        return sessions[:limit]
+    def list_sessions(self, limit: int = 20,
+                       workspace: str | None = None) -> list[SessionMeta]:
+        """List sessions, newest first. Optionally filter by workspace."""
+        sessions = self._index.values()
+        if workspace:
+            ws_normalized = str(Path(workspace).resolve())
+            sessions = [
+                s for s in sessions
+                if s.workspace and str(Path(s.workspace).resolve()) == ws_normalized
+            ]
+        sorted_sessions = sorted(sessions, key=lambda m: m.updated, reverse=True)
+        return sorted_sessions[:limit]
 
-    def search_sessions(self, query: str) -> list[SessionMeta]:
-        """Search sessions by summary text."""
+    def search_sessions(self, query: str,
+                         workspace: str | None = None) -> list[SessionMeta]:
+        """Search sessions by summary text. Optionally filter by workspace."""
         q = query.lower()
         results = []
         for meta in self._index.values():
             if q in meta.summary.lower() or q in meta.id.lower():
                 results.append(meta)
+        if workspace:
+            ws_normalized = str(Path(workspace).resolve())
+            results = [
+                r for r in results
+                if r.workspace and str(Path(r.workspace).resolve()) == ws_normalized
+            ]
         return sorted(results, key=lambda m: m.updated, reverse=True)
+
+    def get_recent(self, count: int = 5,
+                    workspace: str | None = None) -> list[SessionMeta]:
+        """Get the most recent sessions, optionally filtered to workspace."""
+        return self.list_sessions(limit=count, workspace=workspace)
 
     def tag_session(self, session_id: str, tag: str) -> bool:
         """Add a tag to a session."""

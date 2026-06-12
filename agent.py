@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Core Agent loop for ATA Coder.
 
@@ -20,10 +21,13 @@ The agent runs a conversation loop:
 
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
+
+import copy
 
 from .config import AgentConfig, AppConfig
 from .llm_client import LLMClient, SYSTEM_PROMPT, Message
@@ -37,6 +41,10 @@ from .privilege import PrivilegeManager
 from .task_planner import TaskPlanner
 from .self_correct import SelfCorrectionEngine
 from .git_workflow import GitWorkflow
+from .extension import ExtensionManager, get_extension_manager
+from .skill_extension import SkillExtension
+from .model_router import get_subagent_model
+from .settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +130,6 @@ class CoderAgent:
         self.config = config or AppConfig.load()
 
         # Choose client: Anthropic or OpenAI format
-        import os
         if os.environ.get("ATA_CODER_USE_ANTHROPIC") == "1":
             self.llm = AnthropicClient(self.config.llm)
             self._use_anthropic = True
@@ -141,6 +148,26 @@ class CoderAgent:
         self.permissions = self.subsys.permissions
         self.project_info = self.subsys.project_info
         self.sessions = self.subsys.sessions
+
+        # ── Extension Manager ─────────────────────────────────────────────
+        if self.subsys.extensions is not None:
+            self.ext_mgr = self.subsys.extensions
+        else:
+            self.ext_mgr = get_extension_manager()
+            self.subsys.extensions = self.ext_mgr
+
+        # Register skills as extensions
+        self._register_skills_as_extensions()
+
+        # Discover extensions from extension directories
+        self._discover_extensions()
+
+        # Register extension points for agent lifecycle hooks
+        self._register_extension_points()
+
+        # Activate all skill-tagged extensions (multi-skill)
+        for ext_name in [e.meta.name for e in self.ext_mgr.get_by_tag("skill")]:
+            self.ext_mgr.activate(ext_name)
 
         # ── System prompt builder ─────────────────────────────────────────
         self._prompt_builder = SystemPromptBuilder(
@@ -174,11 +201,27 @@ class CoderAgent:
             mcp_tools = self.mcp.get_tools()
             self._all_tools.extend(mcp_tools)
             logger.info(
-                "Total tools: %d builtin + %d MCP = %d",
-                len(TOOL_DEFINITIONS), len(mcp_tools), len(self._all_tools),
+                "MCP tools added: %d", len(mcp_tools),
             )
 
+        # Extension tools
+        ext_tools = self.ext_mgr.aggregate_tools()
+        if ext_tools:
+            self._all_tools.extend(ext_tools)
+            logger.info("Extension tools added: %d", len(ext_tools))
+
+        logger.info(
+            "Total tools: %d builtin + %s MCP + %s extensions = %d",
+            len(TOOL_DEFINITIONS),
+            len(self.mcp.get_tools()) if self.mcp else 0,
+            len(ext_tools),
+            len(self._all_tools),
+        )
+
         self.llm.register_tools(self._all_tools)
+
+        # ── Sub-agent manager (set later by AgentController if used) ──────
+        self._sub_agent_mgr = None
 
     # ── Model routing ──────────────────────────────────────────────────────
 
@@ -204,9 +247,6 @@ class CoderAgent:
         Shortcut: very short tasks → simple (skip API call)
                   very long tasks → complex (skip API call)
         """
-        from .model_router import get_subagent_model
-        from .settings import get_settings
-
         settings = get_settings()
 
         # ── Length shortcut ─────────────────────────────────────────────
@@ -220,7 +260,6 @@ class CoderAgent:
 
         # Copy config and override model — creates an independent client
         from .config import LLMConfig
-        import copy
         classify_config = copy.deepcopy(self.llm.config)
         classify_config.model = cheap_model
 
@@ -259,12 +298,76 @@ class CoderAgent:
         logger.info("AI classify: %.60s → %s (via %s)", task, result, cheap_model)
         return result
 
+    # ── Extension management ────────────────────────────────────────────────
+
+    def _register_skills_as_extensions(self) -> None:
+        """Register all loaded SkillManager skills as SkillExtension adapters."""
+        if not self.subsys.has_skills:
+            return
+        for skill in self.subsys.skills.list_skills():
+            ext = SkillExtension(skill)
+            if self.ext_mgr.register(ext):
+                logger.debug("Registered skill extension: skill:%s", skill.name)
+            else:
+                logger.debug("Skill extension already registered: skill:%s", skill.name)
+
+    def _discover_extensions(self) -> None:
+        """Discover extensions from configured extension directories."""
+        ext_dirs = getattr(self.config.agent, "extension_dirs", [])
+        if not ext_dirs:
+            return
+        for d in ext_dirs:
+            loaded = self.ext_mgr.discover(d)
+            if loaded:
+                logger.info("Discovered %d extensions in %s", len(loaded), d)
+
+    def _register_extension_points(self) -> None:
+        """Register hook points extensions can tap into."""
+        self._ep_on_run_start = self.ext_mgr.extension_point(
+            "on_agent_run_start",
+            "Called when agent.run() starts — (task, skill_name)"
+        )
+        self._ep_on_run_complete = self.ext_mgr.extension_point(
+            "on_agent_run_complete",
+            "Called when agent.run() completes — (task, result, tool_call_count)"
+        )
+        self._ep_on_tool_execute = self.ext_mgr.extension_point(
+            "on_tool_execute",
+            "Called before each tool execution — (tool_name, arguments)"
+        )
+        self._ep_on_tool_result = self.ext_mgr.extension_point(
+            "on_tool_result",
+            "Called after each tool result — (tool_name, result)"
+        )
+        self._ep_on_system_prompt = self.ext_mgr.extension_point(
+            "on_system_prompt_build",
+            "Called during system prompt construction — (prompt, task)"
+        )
+        self._ep_on_model_route = self.ext_mgr.extension_point(
+            "on_model_route",
+            "Called after model routing — (task, complexity, model)"
+        )
+        logger.debug(
+            "Registered %d extension points",
+            len(self.ext_mgr.list_extension_points()),
+        )
+
+    def set_sub_agent_manager(self, mgr: Any) -> None:
+        """Set the SubAgentManager for spawn_subagent tool support."""
+        self._sub_agent_mgr = mgr
+
     # ── Event system ──────────────────────────────────────────────────────
 
     def on_event(self, callback: Callable[[AgentEvent], None]) -> None:
         self._on_event = callback
 
     def _emit(self, event: AgentEvent) -> None:
+        """Emit event to both callback and EventQueue (if available)."""
+        # Support EventQueue (thread-safe agent→UI communication)
+        event_queue = getattr(self, "_event_queue", None)
+        if event_queue is not None:
+            event_queue.put(event)
+        # Backward-compatible callback
         if self._on_event:
             self._on_event(event)
 
@@ -293,8 +396,6 @@ class CoderAgent:
             self._routed_complexity = "explicit"
         else:
             # AI-driven routing: cheap model classifies → route accordingly
-            from .model_router import get_subagent_model
-            from .settings import get_settings
             settings = get_settings()
 
             complexity = self._ai_classify(task)
@@ -303,7 +404,10 @@ class CoderAgent:
                 routed_model = settings.model_haiku
             elif complexity == "complex":
                 routed_model = settings.model_opus
+            elif complexity == "normal":
+                routed_model = settings.default_model
             else:
+                logger.warning("Unknown complexity %r, using default model", complexity)
                 routed_model = settings.default_model
 
             self._route_model(routed_model)
@@ -311,10 +415,16 @@ class CoderAgent:
 
         logger.info("Model: %s (complexity=%s)", self.current_model, self._routed_complexity)
 
+        # Trigger extension point: on_model_route
+        self._ep_on_model_route.trigger(
+            task=task, complexity=self._routed_complexity, model=self.current_model
+        )
+
+        # Trigger extension point: on_run_start
+        self._ep_on_run_start.trigger(task=task, skill_name=skill_name)
+
         # Reset change tracker for new run
-        self.change_tracker.changes.clear()
-        self.change_tracker._next_id = 1
-        self.change_tracker._last_active = -1
+        self.change_tracker.reset()
         self.change_tracker.dry_run = False
 
         # Generate session ID
@@ -324,16 +434,17 @@ class CoderAgent:
             skill_name or (self.skills.active_skill.name if self.skills and self.skills.active_skill else ""),
         )
 
-        # Skill selection
+        # Skill selection (multi-skill support)
         if skill_name and self.skills:
-            skill = self.skills.activate(skill_name)
+            skill = self.skills.activate(skill_name, merge=True)
             if skill:
                 self._emit(SkillChangedEvent(skill.name))
         elif self.skills:
-            detected = self.skills.detect_skill(task)
-            if detected and detected.name != "general-coder":
-                self.skills.activate(detected.name)
-                self._emit(SkillChangedEvent(detected.name))
+            detected = self.skills.detect_skills(task, max_results=3)
+            for skill in detected:
+                if skill.name != "general-coder":
+                    self.skills.activate(skill.name, merge=True)
+                    self._emit(SkillChangedEvent(skill.name))
 
         # Build system prompt — pass the user task for targeted memory recall
         system_prompt = self._build_system_prompt(task)
@@ -383,13 +494,11 @@ class CoderAgent:
                              est_tokens, effective, est_tokens / max_tokens * 100, max_tokens)
                 self.compact()
 
-            # Get allowed tools for active skill
-            allowed_tool_names = None
-            if self.skills:
-                allowed_tool_names = self.skills.get_allowed_tools()
+            # Get allowed tools from multi-skill intersection
+            allowed_tool_names = self._compute_allowed_tools()
 
             filtered_tools = self._all_tools
-            if allowed_tool_names:
+            if allowed_tool_names is not None and len(allowed_tool_names) > 0:
                 filtered_tools = [
                     t for t in self._all_tools
                     if t["function"]["name"] in allowed_tool_names
@@ -431,7 +540,7 @@ class CoderAgent:
                 self._state.messages.append(assistant_msg)
                 for tc, result in zip(tool_calls, results):
                     self._warn_if_large_result(result, tc["function"]["name"])
-                    self._state.messages.append(result.to_tool_result(tc["id"]))
+                    self._store_tool_result(result, tc["id"])
             else:
                 for tc in tool_calls:
                     self._state.tool_call_count += 1
@@ -459,7 +568,7 @@ class CoderAgent:
                         assistant_msg["reasoning_content"] = response["reasoning_content"]
 
                     self._state.messages.append(assistant_msg)
-                    self._state.messages.append(result.to_tool_result(tc["id"]))
+                    self._store_tool_result(result, tc["id"])
 
         elapsed = time.time() - self._state.start_time
         self._emit(CompleteEvent(self._state.tool_call_count, elapsed))
@@ -487,6 +596,13 @@ class CoderAgent:
         # Deactivate skill after task
         if self.skills:
             self.skills.deactivate()
+
+        # Trigger extension point: on_run_complete
+        self._ep_on_run_complete.trigger(
+            task=task,
+            result=final_response or "Task completed.",
+            tool_call_count=self._state.tool_call_count,
+        )
 
         return final_response or "Task completed."
 
@@ -545,6 +661,9 @@ class CoderAgent:
                     original = arguments["command"]
                     arguments["command"] = self.privilege_mgr.wrap_command(original, force_elevation=True)
                     logger.info("Elevated command: %s", arguments["command"][:100])
+
+        # Trigger extension point: on_tool_execute
+        self._ep_on_tool_execute.trigger(tool_name=tool_name, arguments=arguments)
 
         self._emit(ToolCallEvent(tool_name, arguments, source=source))
 
@@ -674,8 +793,11 @@ class CoderAgent:
 
         tool_calls = response.get("tool_calls", [])
         text = response.get("content", "")
+        SAFETY_LIMIT = 999  # circuit breaker
 
-        while tool_calls and self._state.tool_call_count < self.config.agent.max_tool_calls:
+        while (tool_calls
+               and self._state.tool_call_count < SAFETY_LIMIT
+               and self._state.tool_call_count < self.config.agent.max_tool_calls):
             for tc in tool_calls:
                 self._state.tool_call_count += 1
                 tool_name = tc["function"]["name"]
@@ -690,7 +812,7 @@ class CoderAgent:
                     "content": text or None,
                     "tool_calls": [tc],
                 })
-                self._state.messages.append(result.to_tool_result(tc["id"]))
+                self._store_tool_result(result, tc["id"])
 
             if stream:
                 response = self._streaming_chat()
@@ -703,6 +825,32 @@ class CoderAgent:
                 text = new_text
 
         return text or "Done."
+
+    # ── Tool filtering (multi-skill) ──────────────────────────────────────
+
+    def _compute_allowed_tools(self) -> set[str] | None:
+        """Compute effective tool restrictions from all active skill extensions.
+
+        Rule: intersection of non-empty tool restrictions across all active
+        skill extensions. Empty list = no restriction (all tools allowed).
+        Returns None if no restrictions exist.
+        """
+        restrictions: list[set[str]] = []
+        for ext in self.ext_mgr.list_active():
+            if "skill" not in ext.meta.tags:
+                continue
+            tools = ext.get_tools()
+            if tools:  # non-empty = this extension restricts tools
+                restrictions.append(set(tools))
+
+        if not restrictions:
+            return None  # no restrictions → all tools allowed
+
+        # Intersection of all non-empty restrictions
+        allowed = restrictions[0]
+        for r in restrictions[1:]:
+            allowed &= r
+        return allowed if allowed else None
 
     # ── System prompt builder ─────────────────────────────────────────────
 
@@ -752,6 +900,26 @@ class CoderAgent:
         return "\n".join(lines)
 
     # ── Helpers ──────────────────────────────────────────────────────
+
+    def _store_tool_result(self, result: ToolResult, tool_call_id: str) -> None:
+        """Truncate tool output and append to message history.
+
+        Full output is available during execution, but only a capped version
+        is stored for future LLM turns to prevent context bloat.
+        """
+        cap = self.config.agent.max_message_output_chars
+        content = result.to_message()
+        if len(content) > cap:
+            content = (
+                content[:cap]
+                + f"\n\n... [truncated {len(content) - cap:,} chars "
+                + f"from {result.output.count(chr(10)) + 1} lines]"
+            )
+        self._state.messages.append({
+            "role": "tool",
+            "tool_call_id": tool_call_id,
+            "content": content,
+        })
 
     @staticmethod
     def _warn_if_large_result(result: ToolResult, tool_name: str) -> None:
@@ -1011,9 +1179,7 @@ class CoderAgent:
                 f"User requests: {'; '.join(user_msgs[:5])}\n"
             )
             # Use a separate cheap-model client for summarisation
-            from .model_router import get_subagent_model
             from .config import LLMConfig
-            import copy
             summary_config = copy.deepcopy(self.llm.config)
             summary_config.model = get_subagent_model()
             if self._use_anthropic:
@@ -1052,15 +1218,22 @@ class CoderAgent:
         """Read the current content of a file before editing (for change tracking)."""
         if not file_path:
             return ""
-        from pathlib import Path
         p = Path(file_path)
         if not p.is_absolute():
             p = self.tools.workspace / p
         try:
             if p.exists():
+                # Safety: skip files > 50MB to avoid OOM
+                if p.stat().st_size > 50_000_000:
+                    logger.warning("Skipping large file for change tracking: %s", p)
+                    return f"[file too large: {p.stat().st_size / 1_000_000:.0f}MB]"
                 return p.read_text(encoding="utf-8", errors="replace")
+        except FileNotFoundError:
+            return ""
         except Exception:
-            pass
+            logger.debug(
+                "Failed to read %s for change tracking", file_path, exc_info=True
+            )
         return ""
 
     def get_token_estimate(self) -> int:

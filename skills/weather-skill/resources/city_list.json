@@ -1,0 +1,17 @@
+{
+  "beijing": {"lat": 39.9042, "lon": 116.4074, "country": "China"},
+  "shanghai": {"lat": 31.2304, "lon": 121.4737, "country": "China"},
+  "guangzhou": {"lat": 23.1291, "lon": 113.2644, "country": "China"},
+  "shenzhen": {"lat": 22.5431, "lon": 114.0579, "country": "China"},
+  "tokyo": {"lat": 35.6762, "lon": 139.6503, "country": "Japan"},
+  "osaka": {"lat": 34.6937, "lon": 135.5023, "country": "Japan"},
+  "seoul": {"lat": 37.5665, "lon": 126.9780, "country": "South Korea"},
+  "singapore": {"lat": 1.3521, "lon": 103.8198, "country": "Singapore"},
+  "london": {"lat": 51.5074, "lon": -0.1278, "country": "United Kingdom"},
+  "paris": {"lat": 48.8566, "lon": 2.3522, "country": "France"},
+  "new york": {"lat": 40.7128, "lon": -74.0060, "country": "United States"},
+  "san francisco": {"lat": 37.7749, "lon": -122.4194, "country": "United States"},
+  "sydney": {"lat": -33.8688, "lon": 151.2093, "country": "Australia"},
+  "berlin": {"lat": 52.5200, "lon": 13.4050, "country": "Germany"},
+  "moscow": {"lat": 55.7558, "lon": 37.6173, "country": "Russia"}
+}

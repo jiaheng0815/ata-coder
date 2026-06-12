@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.egg-info/
+*.egg
+*.whl
+dist/
+build/
+
+# Environment
+.env
+.env.local
+*.venv/
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Test
+.pytest_cache/
+.htmlcov/
+.coverage
+coverage/
+*.coverage.*
+.xml
+junit/
+
+# Project specific
+.ata_coder/
+__diff_*.txt
+__committed_*.py

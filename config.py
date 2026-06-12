@@ -93,8 +93,29 @@ class AgentConfig:
             # Set higher if your model genuinely handles long context well.
         )
     )
+    max_message_output_chars: int = field(
+        default_factory=lambda: int(
+            os.getenv("MAX_MESSAGE_OUTPUT_CHARS", "8000")
+            # Tool results stored in message history are capped at this size.
+            # The full result is still available during execution — this only
+            # limits what gets sent to the LLM on subsequent turns.
+        )
+    )
     workspace_dir: str = field(
         default_factory=lambda: os.getenv("WORKSPACE_DIR", str(Path.cwd()))
+    )
+
+    # Extension & sub-agent settings
+    extension_dirs: list[str] = field(
+        default_factory=lambda: [
+            d.strip() for d in os.getenv("EXTENSION_DIRS", "").split(",") if d.strip()
+        ]
+    )
+    max_sub_agents: int = field(
+        default_factory=lambda: int(os.getenv("MAX_SUB_AGENTS", "5"))
+    )
+    sub_agent_timeout: float = field(
+        default_factory=lambda: float(os.getenv("SUB_AGENT_TIMEOUT", "300.0"))
     )
 
     # Safety settings

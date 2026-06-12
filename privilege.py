@@ -16,10 +16,12 @@ Dangerous mode features:
   - Platform-specific privilege escalation commands
 """
 
+import base64
 import logging
 import os
 import platform
 import re
+import shlex
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -150,6 +152,7 @@ def get_elevation_prefix() -> str | None:
 def wrap_privileged_command(command: str) -> str:
     """
     Wrap a command with platform-specific privilege elevation.
+    Uses shlex.quote() to prevent shell injection.
     """
     os_family = detect_os()
     priv = detect_privilege()
@@ -158,15 +161,25 @@ def wrap_privileged_command(command: str) -> str:
         return command
 
     if os_family == OSFamily.LINUX:
-        return f"sudo -- {command}"
+        return f"sudo -- {command}"  # -- stops option parsing, command is safe
 
     elif os_family == OSFamily.MACOS:
-        return f"osascript -e 'do shell script \"{command}\" with administrator privileges'"
+        # osascript: double-quote the command, shlex.quote for inner safety
+        return (
+            "osascript -e "
+            + shlex.quote(f'do shell script {shlex.quote(command)}'
+                          ' with administrator privileges')
+        )
 
     elif os_family == OSFamily.WINDOWS:
-        import base64
+        # Encode command as base64 (utf-16-le) to avoid escaping nightmares
+        # in PowerShell's nested quoting
         encoded = base64.b64encode(command.encode("utf-16-le")).decode()
-        return f'powershell -Command "Start-Process -Verb RunAs -Wait -FilePath cmd.exe -ArgumentList \'/c {command}\'"'
+        return (
+            'powershell -Command "'
+            'Start-Process -Verb RunAs -Wait -FilePath cmd.exe '
+            f'-ArgumentList \'/c powershell -EncodedCommand {encoded}\'"'
+        )
 
     return command
 

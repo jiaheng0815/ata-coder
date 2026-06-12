@@ -125,6 +125,12 @@ class ChangeTracker:
         if enabled:
             logger.info("DRY RUN MODE enabled — no actual changes will be made")
 
+    def reset(self) -> None:
+        """Reset tracker state for a new agent run."""
+        self.changes.clear()
+        self._next_id = 1
+        self._last_active = -1
+
     # ── Capture changes ──────────────────────────────────────────────────
 
     def capture_write(self, file_path: str, content: str) -> FileChange | None:

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Example 10: Full Agent — all subsystems wired with colored output."""
 import sys; sys.path.insert(0, str(__import__('pathlib').Path(__file__).parent.parent))
 import os
@@ -26,22 +27,29 @@ def main():
         print(f"  {dim('Project:')} app/models.py (Task dataclass)")
 
         from agent import CoderAgent
+        from agent_subsystems import AgentSubsystems
         from tools import ToolExecutor
-        from skills import get_skill_manager
-        from memory import get_memory_store
         from permissions import PermissionStore, PermissionMode
         from session import SessionManager
         from project import ProjectDetector
+        from skills import get_skill_manager
+        from memory import get_memory_store
 
         perms = PermissionStore(ws)
         perms.set_category_rule("write", PermissionMode.ALLOW)
         perms.set_category_rule("shell", PermissionMode.ALLOW)
 
+        subsystems = AgentSubsystems(
+            skills=get_skill_manager(),
+            memory=get_memory_store(),
+            permissions=perms,
+            project_info=ProjectDetector(ws).detect(),
+            sessions=SessionManager(ws),
+        )
+
         agent = CoderAgent(
             config=config, tool_executor=ToolExecutor(config.agent),
-            skill_manager=get_skill_manager(), memory_store=get_memory_store(),
-            permission_store=perms, project_info=ProjectDetector(ws).detect(),
-            session_manager=SessionManager(ws),
+            subsystems=subsystems,
         )
 
         task = (

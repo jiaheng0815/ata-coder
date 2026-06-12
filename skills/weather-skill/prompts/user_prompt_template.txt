@@ -1,0 +1,3 @@
+What is the weather in {{city}}?
+
+Show temperature in {{units}} and include a {{forecast_days}}-day forecast.

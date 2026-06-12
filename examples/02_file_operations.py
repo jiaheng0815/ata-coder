@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Example 02: File Operations — read/write/edit with tools."""
 import sys; sys.path.insert(0, str(__import__('pathlib').Path(__file__).parent.parent))
 import os
@@ -29,7 +30,9 @@ def main():
         perms.set_category_rule("write", PermissionMode.ALLOW)
         perms.set_category_rule("shell", PermissionMode.ALLOW)
 
-        agent = CoderAgent(config=config, tool_executor=ToolExecutor(config.agent), permission_store=perms)
+        from agent_subsystems import AgentSubsystems
+        agent = CoderAgent(config=config, tool_executor=ToolExecutor(config.agent),
+                           subsystems=AgentSubsystems(permissions=perms))
         task = f"Read {ws}/math_utils.py, add multiply(a,b) and divide(a,b) with docstrings. Divide must handle zero."
         print(f"  {dim('Task:')} {task[:100]}...\n")
         print_separator()

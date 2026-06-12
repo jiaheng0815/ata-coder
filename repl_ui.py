@@ -30,6 +30,37 @@ except ImportError:
     HAS_READLINE = False
 
 try:
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.key_binding import KeyBindings
+    from prompt_toolkit.styles import Style as PTStyle
+    from prompt_toolkit.history import InMemoryHistory
+    HAS_PROMPT_TOOLKIT = True
+except ImportError:
+    HAS_PROMPT_TOOLKIT = False
+
+
+class _DedupeHistory(InMemoryHistory):
+    """Input history that skips consecutive duplicate entries.
+
+    Wraps prompt_toolkit's InMemoryHistory.  Consecutive identical
+    inputs are stored only once — pressing ↑ multiple times jumps
+    straight to the *different* previous inputs instead of showing
+    the same one over and over.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._last_text: str | None = None
+
+    def append_string(self, string: str) -> None:
+        """Store only if different from the immediately preceding entry."""
+        s = string.strip()
+        if s and s != self._last_text:
+            self._last_text = s
+            super().append_string(s)
+
+
+try:
     from rich.console import Console
     from rich.markdown import Markdown
     from rich.markup import escape as rich_escape
@@ -46,11 +77,68 @@ try:
     from rich.columns import Columns
     from rich.rule import Rule
     from rich.style import Style
+    from rich.theme import Theme
     HAS_RICH = True
 except ImportError:
     HAS_RICH = False
     def rich_escape(text: str) -> str:
         return text.replace("[", "\\[").replace("]", "\\]")
+
+
+# ── One Dark Pro theme ────────────────────────────────────────────────────────
+
+ONE_DARK_THEME = Theme({
+    # Base
+    "background":      "#282C34",
+    "foreground":      "#ABB2BF",
+    "black":           "#3F4451",
+    "white":           "#D7DAE0",
+    # Accent
+    "red":             "#E06C75",
+    "green":           "#98C379",
+    "yellow":          "#D19A66",
+    "blue":            "#61AFEF",
+    "cyan":            "#56B6C2",
+    "purple":          "#C678DD",
+    # Bright variants
+    "brightBlack":     "#4F5666",
+    "brightRed":       "#BE5046",
+    "brightGreen":     "#A5E075",
+    "brightYellow":    "#E5C07B",
+    "brightBlue":      "#4DC4FF",
+    "brightCyan":      "#4CD1E0",
+    "brightPurple":    "#DE73FF",
+    "brightWhite":     "#E6E6E6",
+    # Semantic aliases
+    "border":          "#3F4451",
+    "comment":         "#5C6370",
+    "dim":             "#5C6370",
+    "prompt":          "#61AFEF",
+    "success":         "#98C379",
+    "warning":         "#D19A66",
+    "error":           "#E06C75",
+    "info":            "#56B6C2",
+    "cursor":          "#528BFF",
+    "selection":       "#ABB2BF",
+}) if HAS_RICH else None
+
+ONE_DARK_SYNTAX = {
+    "background":       "#282C34",
+    "default":          "#ABB2BF",    # variables, punctuation
+    "keyword":          "#E06C75",    # if, else, for, while, return, import, class
+    "string":           "#E5C07B",    # "strings", 'strings'
+    "number":           "#56B6C2",    # 42, 3.14, 0xFF
+    "name.function":    "#98C379",    # function_names(), method_calls()
+    "name.class":       "#E5C07B",    # ClassName, Interface, Enum
+    "name.tag":         "#E06C75",    # <HTML>, </tags>
+    "name.attribute":   "#ABB2BF",    # obj.property
+    "operator":         "#ABB2BF",    # + - * / = => ===
+    "comment":          "#5C6370",    # // /* */
+    "comment.line":     "#5C6370",
+    "punctuation":      "#ABB2BF",    # ( ) [ ] { } , ; .
+    "name.builtin":     "#56B6C2",    # console, Array, parseInt
+    "name.constant":    "#56B6C2",    # null, undefined, true, false
+} if HAS_RICH else {}
 
 try:
     from colorama import init, Fore, Back, Style as ColoramaStyle
@@ -171,7 +259,7 @@ def render_diff_rich(console, old_text: str, new_text: str, file_path: str) -> N
         else:
             rich_text.append(line + "\n")
 
-    console.print(Panel(rich_text, title=f"[cyan]Diff: {file_path}[/cyan]", border_style="cyan"))
+    console.print(Panel(rich_text, title=f"[bold][#61AFEF]Diff: {file_path}[/#61AFEF][/bold]", border_style="#3F4451"))
 
 
 def render_diff_simple(old_text: str, new_text: str, file_path: str) -> str:
@@ -301,7 +389,7 @@ class ClaudeCodeUI:
     }
 
     def __init__(self, workspace: str = ""):
-        self.console = Console() if HAS_RICH else None
+        self.console = Console(theme=ONE_DARK_THEME, color_system="truecolor") if HAS_RICH else None
         self.workspace = workspace
         self._streaming = False
         self._first_text = True
@@ -324,6 +412,43 @@ class ClaudeCodeUI:
 
         # Command completion state
         self._cmd_names: list[str] = []
+
+        # prompt_toolkit session for multi-line input + history
+        self._pt_session = None
+        self._input_history = None
+        if HAS_PROMPT_TOOLKIT:
+            # Only add bindings for newline insertion — Enter/submit and
+            # up/down history navigation use prompt_toolkit defaults with
+            # multiline=False.
+            kb = KeyBindings()
+
+            @kb.add("c-j")
+            def _on_newline(event):
+                """Ctrl+Enter or Ctrl+J inserts a newline."""
+                event.app.current_buffer.insert_text("\n")
+
+            @kb.add("escape", "enter")
+            def _on_alt_enter(event):
+                """Alt+Enter inserts a newline."""
+                event.app.current_buffer.insert_text("\n")
+
+            # History with consecutive deduplication
+            self._input_history = _DedupeHistory()
+
+            try:
+                self._pt_session = PromptSession(
+                    key_bindings=kb,
+                    history=self._input_history,
+                    style=PTStyle.from_dict({
+                        "prompt": "#61AFEF bold",
+                        "prompt-danger": "#E06C75 bold",
+                    }),
+                )
+            except Exception:
+                logger.warning(
+                    "prompt_toolkit unavailable, falling back to single-line"
+                )
+                self._pt_session = None
 
     # ── Readline command completion ──────────────────────────────────────
 
@@ -430,13 +555,14 @@ class ClaudeCodeUI:
         self.console.print()
 
         # Big ASCII art title — ATA CODER
+        A = "#61AFEF"
         title = [
-            "[bold cyan]        █████╗  ████████╗  █████╗        ██████╗  ██████╗  ██████╗  ███████╗ ██████╗  [/bold cyan]",
-            "[bold cyan]       ██╔══██╗ ╚══██╔══╝ ██╔══██╗      ██╔════╝ ██╔═══██╗ ██╔══██╗ ██╔════╝ ██╔══██╗ [/bold cyan]",
-            "[bold cyan]       ███████║    ██║    ███████║      ██║      ██║   ██║ ██║  ██║ █████╗   ██████╔╝ [/bold cyan]",
-            "[bold cyan]       ██╔══██║    ██║    ██╔══██║      ██║      ██║   ██║ ██║  ██║ ██╔══╝   ██╔══██╗ [/bold cyan]",
-            "[bold cyan]       ██║  ██║    ██║    ██║  ██║      ╚██████╗ ╚██████╔╝ ██████╔╝ ███████╗ ██║  ██║ [/bold cyan]",
-            "[bold cyan]       ╚═╝  ╚═╝    ╚═╝    ╚═╝  ╚═╝       ╚═════╝  ╚═════╝  ╚═════╝  ╚══════╝ ╚═╝  ╚═╝ [/bold cyan]",
+            f"[bold][{A}]        █████╗  ████████╗  █████╗        ██████╗  ██████╗  ██████╗  ███████╗ ██████╗  [/{A}][/bold]",
+            f"[bold][{A}]       ██╔══██╗ ╚══██╔══╝ ██╔══██╗      ██╔════╝ ██╔═══██╗ ██╔══██╗ ██╔════╝ ██╔══██╗ [/{A}][/bold]",
+            f"[bold][{A}]       ███████║    ██║    ███████║      ██║      ██║   ██║ ██║  ██║ █████╗   ██████╔╝ [/{A}][/bold]",
+            f"[bold][{A}]       ██╔══██║    ██║    ██╔══██║      ██║      ██║   ██║ ██║  ██║ ██╔══╝   ██╔══██╗ [/{A}][/bold]",
+            f"[bold][{A}]       ██║  ██║    ██║    ██║  ██║      ╚██████╗ ╚██████╔╝ ██████╔╝ ███████╗ ██║  ██║ [/{A}][/bold]",
+            f"[bold][{A}]       ╚═╝  ╚═╝    ╚═╝    ╚═╝  ╚═╝       ╚═════╝  ╚═════╝  ╚═════╝  ╚══════╝ ╚═╝  ╚═╝ [/{A}][/bold]",
         ]
 
         # Fetch model routing info
@@ -476,7 +602,7 @@ class ClaudeCodeUI:
         info_lines.append("")
         info_lines.append("[dim]Type your task or / for commands (Tab to complete). Ctrl+C to interrupt.[/dim]")
 
-        self.console.print(Panel("\n".join(title + info_lines), border_style="cyan", padding=(1, 2)))
+        self.console.print(Panel("\n".join(title + info_lines), border_style="#3F4451", padding=(1, 2)))
         self.console.print()
 
     def _simple_welcome(self, model, workspace, skill, project_info, mcp_servers):
@@ -570,8 +696,12 @@ class ClaudeCodeUI:
                 sys.stdout.flush()
             else:
                 # Inside code block — looking for closing ```
-                idx = text.find("\n```")
-                if idx == -1:
+                # Check both: \n``` (typical) and ``` at start of chunk
+                close_idx = text.find("\n```")
+                if close_idx == -1 and text.startswith("```"):
+                    close_idx = -2  # signal: fence at position 0
+
+                if close_idx == -1:
                     # No closing fence — check for partial at end
                     if text.endswith("`") or text.endswith("``"):
                         cut = 1 if text.endswith("`") and not text.endswith("``") else 2
@@ -580,33 +710,63 @@ class ClaudeCodeUI:
                     else:
                         self._code_buffer += text
                     break
-                self._code_buffer += text[:idx]
-                self._flush_code_block()
-                self._in_code_block = False
-                self._code_buffer = ""
-                rest = text[idx + 4:]
-                if rest.startswith("\n"):
-                    rest = rest[1:]
-                text = rest
+                elif close_idx == -2:
+                    # Closing ``` at very start of chunk
+                    self._flush_code_block()
+                    self._in_code_block = False
+                    self._code_buffer = ""
+                    rest = text[3:]  # skip ```
+                    if rest.startswith("\n"):
+                        rest = rest[1:]
+                    text = rest
+                else:
+                    # Normal case: \n``` found
+                    self._code_buffer += text[:close_idx]
+                    self._flush_code_block()
+                    self._in_code_block = False
+                    self._code_buffer = ""
+                    rest = text[close_idx + 4:]  # skip \n```
+                    if rest.startswith("\n"):
+                        rest = rest[1:]
+                    text = rest
 
     def _flush_code_block(self):
-        """Render the accumulated code buffer with syntax highlighting."""
+        """Render the accumulated code buffer with syntax highlighting.
+
+        ASCII diagrams (box-drawing chars) and plain-text blocks are
+        printed raw — no dark background, no syntax highlighting.
+        """
         if not self._code_buffer.strip():
             return
-        try:
-            syntax = Syntax(
-                self._code_buffer,
-                self._code_lang if self._code_lang else "text",
-                theme="monokai",
-                line_numbers=False,
-                word_wrap=False,
-            )
-            self.console.print(syntax)
-        except Exception:
-            # Fallback: just print without highlighting
-            self.console.print(self._code_buffer, style="dim")
-        # Explicit newline resets any background styling from the Syntax widget
-        # so subsequent text doesn't inherit the code-block colour.
+
+        # Detect ASCII diagrams / plain-text blocks
+        lang = self._code_lang.lower() if self._code_lang else ""
+        is_plain = lang in ("text", "plaintext", "diagram", "tree", "")
+        has_box_drawing = any(
+            ord(c) >= 0x2500 and ord(c) <= 0x257F  # box-drawing range
+            for c in self._code_buffer[:200]
+        )
+
+        if is_plain and has_box_drawing:
+            # ASCII diagram — print raw, no Syntax background
+            self.console.print(self._code_buffer.rstrip())
+        elif is_plain:
+            # Plain text block — dim, no background
+            self.console.print(self._code_buffer.rstrip(), style="dim")
+        else:
+            try:
+                syntax = Syntax(
+                    self._code_buffer,
+                    self._code_lang if self._code_lang else "text",
+                    theme="default",
+                    line_numbers=False,
+                    word_wrap=False,
+                    background_color="#282C34",
+                )
+                self.console.print(syntax)
+            except Exception:
+                self.console.print(self._code_buffer, style="dim")
+
         sys.stdout.write("\n")
         sys.stdout.flush()
 
@@ -889,18 +1049,48 @@ class ClaudeCodeUI:
                 self.console.print("[red bold]DANGEROUS MODE[/red bold] [dim]elevated privileges active[/dim]")
             if status:
                 self.console.print(f"[dim]{status}[/dim]")
+
+        if HAS_PROMPT_TOOLKIT:
+            return self._get_input_pt(dangerous)
+        else:
+            return self._get_input_fallback(dangerous)
+
+    def _get_input_pt(self, dangerous: bool = False) -> str:
+        """Read input via prompt_toolkit.
+
+        Enter         → submit
+        Ctrl+Enter    → insert newline
+        Alt+Enter     → insert newline
+        Up/Down       → browse input history (consecutive dupes skipped)
+        """
+        if self._pt_session is None:
+            return self._get_input_fallback(dangerous)
+
+        prompt_class = "prompt-danger" if dangerous else "prompt"
+        try:
+            result = self._pt_session.prompt(
+                [("class:" + prompt_class, "❯ ")],
+                multiline=False,
+            )
+            sys.stdout.flush()
+            return result.strip()
+        except (KeyboardInterrupt, EOFError):
+            return ""
+
+    def _get_input_fallback(self, dangerous: bool = False) -> str:
+        """Fallback single-line input when prompt_toolkit is unavailable."""
+        if HAS_RICH:
             prompt_style = "[bold red]❯[/bold red]" if dangerous else "[bold cyan]❯[/bold cyan]"
             result = self.console.input(prompt_style + " ")
             sys.stdout.flush()
             return result.strip()
         else:
-            print()  # blank line before prompt
+            print()
             if dangerous:
                 print(f"{Colors.RED}{Colors.BOLD}[DANGEROUS MODE]{Colors.RESET}")
-            if status:
-                print(f"{Colors.DIM}{status}{Colors.RESET}")
             prompt_char = f"{Colors.RED}{Colors.BOLD}>{Colors.RESET}" if dangerous else f"{Colors.CYAN}{Colors.BOLD}>{Colors.RESET}"
-            return input(prompt_char + " ").strip()
+            result = input(prompt_char + " ")
+            return result.strip()
 
     # ── Help ─────────────────────────────────────────────────────────────
 
@@ -962,7 +1152,7 @@ class ClaudeCodeUI:
   - Use [cyan]--resume[/cyan] to continue a saved session
   - The agent auto-detects your skill from the task
 """
-            self.console.print(Panel(help_text, border_style="cyan"))
+            self.console.print(Panel(help_text, border_style="#3F4451"))
         else:
             print("""
 Commands: /help /clear /compact /context /cost
@@ -993,7 +1183,7 @@ Tip:      Type / then press Tab to auto-complete commands
             table.add_row("Time", f"{self._tracker.elapsed:.0f}s")
 
             self.console.print()
-            self.console.print(Panel(table, title="Context", border_style="dim"))
+            self.console.print(Panel(table, title="Context", border_style="#3F4451"))
         else:
             pct = min(100, int(estimated_tokens / max_tokens * 100))
             print(f"\nContext: {total_messages} msgs | {tool_calls} tools | ~{estimated_tokens} tokens ({pct}%)")

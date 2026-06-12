@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Example 04: Skill Auto-Detection — colored output."""
 import sys; sys.path.insert(0, str(__import__('pathlib').Path(__file__).parent.parent))
 import os

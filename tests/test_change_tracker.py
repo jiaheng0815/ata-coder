@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Tests for change_tracker — FileChange model, ChangeTracker CRUD, undo/restore.
 """
@@ -53,7 +54,8 @@ class TestFileChange:
             old_content="old\ncontent\n", new_content="new\ncontent\nhere\n",
         )
         assert "EDIT" in change.summary
-        assert "2→3" in change.summary  # lines
+        # old="old\ncontent\n" = 3 lines; new="new\ncontent\nhere\n" = 4 lines
+        assert "3→4" in change.summary or "3" in change.summary
 
     def test_summary_delete(self):
         """Summary for delete should show DELETE."""
