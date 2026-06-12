@@ -539,10 +539,10 @@ def create_server(
 ) -> HTTPServer:
     """Create and configure the HTTP API server."""
 
-    # Common mistake: --host 8080 instead of -p 8080
+    # Common mistakes: URLs, port numbers
+    if host.startswith("http://") or host.startswith("https://"):
+        host = host.split("://", 1)[1].rstrip("/")
     if host.isdigit():
-        print(f"\n  Heads up: --host {host} looks like a port number.")
-        print(f"  Did you mean  -p {host}  ?  Using port {host}.\n")
         port = int(host)
         host = "0.0.0.0"
 
