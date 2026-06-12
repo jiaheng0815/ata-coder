@@ -445,13 +445,24 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
         events_lock = threading.Lock()
 
         def on_event(event):
-            from .agent import TextDeltaEvent, ToolCallEvent, ToolResultEvent, CompleteEvent, ErrorEvent
+            from .agent import (TextDeltaEvent, ToolCallEvent, ToolResultEvent,
+                                CompleteEvent, ErrorEvent, ReasoningEvent, ThinkingEvent)
 
             if isinstance(event, TextDeltaEvent):
-                data = event.text
+                # Print text chunks to server console
+                if event.text.strip():
+                    sys.stdout.write(event.text)
+                    sys.stdout.flush()
                 with events_lock:
-                    events.append(("text", data))
+                    events.append(("text", event.text))
+            elif isinstance(event, (ReasoningEvent, ThinkingEvent)):
+                # Thinking/reasoning — dim output on server
+                sys.stdout.write(f"\n  [thinking] {event.text[:120]}...\n" if len(event.text) > 120 else f"\n  [thinking] {event.text}\n")
+                sys.stdout.flush()
+                with events_lock:
+                    events.append(("thinking", event.text[:200]))
             elif isinstance(event, ToolCallEvent):
+                print(f"\n  🔧 [{event.source}] {event.tool_name}({_brief_args(event.arguments)})")
                 with events_lock:
                     events.append(("tool_call", {
                         "name": event.tool_name,
@@ -459,17 +470,22 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
                         "source": event.source,
                     }))
             elif isinstance(event, ToolResultEvent):
+                status = "✓" if event.result.success else "✗"
+                preview = (event.result.output or "")[:200].replace("\n", " ")
+                print(f"  {status} {event.tool_name}: {preview}")
                 with events_lock:
                     events.append(("tool_result", {
                         "name": event.tool_name,
                         "success": event.result.success,
-                        "output": event.result.output[:500],
+                        "output": (event.result.output or "")[:500],
                         "error": event.result.error,
                     }))
             elif isinstance(event, ErrorEvent):
+                print(f"\n  ❌ {event.error}")
                 with events_lock:
                     events.append(("error", {"error": event.error}))
             elif isinstance(event, CompleteEvent):
+                print(f"\n  ✓ Done — {event.total_tool_calls} tools, {event.total_time:.1f}s\n")
                 with events_lock:
                     events.append(("complete", {
                         "tool_calls": event.total_tool_calls,
@@ -559,6 +575,18 @@ def create_server(
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Entry point
+def _brief_args(args: dict) -> str:
+    """Summarize tool arguments for console display."""
+    if not args:
+        return ""
+    items = []
+    for k, v in args.items():
+        if isinstance(v, str):
+            v = v[:80] + ("..." if len(v) > 80 else "")
+        items.append(f"{k}={v!r}")
+    return ", ".join(items[:3])
+
+
 def _detect_lan_ip() -> str | None:
     """Detect the LAN IP address for mobile/tablet access."""
     try:
@@ -596,8 +624,12 @@ def main():
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
 
-    if args.verbose:
-        logging.basicConfig(level=logging.DEBUG)
+    # Server mode: verbose by default so you can see what the agent is doing
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
 
     if args.allow_all:
         os.environ["ATA_CODER_ALLOW_ALL"] = "1"
