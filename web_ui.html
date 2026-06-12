@@ -517,9 +517,13 @@ function appendMessage(role, text) {
 /* ═══════════════════════════ Markdown ═══════════════════════════ */
 function renderMarkdown(text) {
     let html = escapeHtml(text);
-    // Code blocks
-    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
-        `<pre><code class="language-${lang}">${escapeHtml(code.trim())}</code></pre>`);
+    // Code blocks — syntax highlight Python (and similar langs)
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+        const highlighted = (lang === 'python' || lang === 'py' || !lang)
+            ? highlightCode(code.trim(), lang || 'python')
+            : escapeHtml(code.trim());
+        return `<pre><code class="language-${lang||'text'}">${highlighted}</code></pre>`;
+    });
     // Inline code
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
     // Bold
@@ -529,6 +533,111 @@ function renderMarkdown(text) {
     // Newlines
     html = html.replace(/\n/g, '<br>');
     return html;
+}
+
+/* ═══════════════════════ Syntax highlighting ═══════════════════════ */
+const HL = {
+    keyword: 'color:#C678DD;font-weight:bold',    // purple/pink: def class if for while return import
+    string:  'color:#98C379',                      // green: "strings"
+    number:  'color:#D19A66',                      // orange: 42 3.14
+    func:    'color:#61AFEF',                      // blue: function_name()
+    class:   'color:#E5C07B',                      // yellow: ClassName
+    var:     'color:#E06C75',                      // red: variable_name
+    comment: 'color:#5C6370;font-style:italic',    // gray: # comments
+    builtin: 'color:#56B6C2',                      // cyan: print len range
+    none:    'color:#D19A66;font-weight:bold',     // orange bold: None True False
+    decorator:'color:#E5C07B',                     // yellow: @decorator
+    op:      'color:#56B6C2',                      // cyan: + - * / = ==
+    fg:      'color:#ABB2BF',                      // default foreground
+};
+const _KW = new Set(['def','class','if','elif','else','for','while','return','import','from','as','try',
+    'except','finally','with','as','yield','raise','assert','pass','break','continue','and','or','not',
+    'in','is','lambda','global','nonlocal','del','async','await']);
+const _BT = new Set(['print','len','range','int','str','float','bool','list','dict','set','tuple',
+    'type','isinstance','super','enumerate','zip','map','filter','sorted','reversed','any','all',
+    'open','input','round','abs','min','max','sum','pow','divmod','ord','chr','repr','id','dir',
+    'hasattr','getattr','setattr','vars','callable','compile','exec','eval','__import__']);
+const _NN = new Set(['None','True','False','null','undefined','NaN','Infinity']);
+
+function highlightCode(code, lang) {
+    // Tokenize and color
+    let out = '';
+    let i = 0;
+    const n = code.length;
+    while (i < n) {
+        // Comments
+        if (code[i] === '#' && (i===0 || code[i-1]!=='\\')) {
+            let end = code.indexOf('\n', i);
+            if (end === -1) end = n;
+            out += `<span style="${HL.comment}">${escapeHtml(code.slice(i, end))}</span>`;
+            i = end;
+            continue;
+        }
+        // Strings
+        if (code[i] === '"' || code[i] === "'") {
+            const q = code[i];
+            let j = i + 1;
+            while (j < n && code[j] !== q) {
+                if (code[j] === '\\') j++;
+                j++;
+            }
+            if (j < n) j++; // closing quote
+            out += `<span style="${HL.string}">${escapeHtml(code.slice(i, j))}</span>`;
+            i = j;
+            continue;
+        }
+        // Decorators
+        if (code[i] === '@' && (i===0 || code[i-1]==='\n')) {
+            let j = i + 1;
+            while (j < n && /[a-zA-Z0-9_.]/.test(code[j])) j++;
+            out += `<span style="${HL.decorator}">${escapeHtml(code.slice(i, j))}</span>`;
+            i = j;
+            continue;
+        }
+        // Numbers
+        if (/[0-9]/.test(code[i]) && (i===0 || !/[a-zA-Z_]/.test(code[i-1]))) {
+            let j = i;
+            while (j < n && /[0-9a-fA-FxX._]/.test(code[j])) j++;
+            out += `<span style="${HL.number}">${escapeHtml(code.slice(i, j))}</span>`;
+            i = j;
+            continue;
+        }
+        // Words (keywords, builtins, None/True/False, functions, classes, variables)
+        if (/[a-zA-Z_]/.test(code[i])) {
+            let j = i;
+            while (j < n && /[a-zA-Z0-9_]/.test(code[j])) j++;
+            const word = code.slice(i, j);
+            const escaped = escapeHtml(word);
+            if (_NN.has(word)) {
+                out += `<span style="${HL.none}">${escaped}</span>`;
+            } else if (_KW.has(word)) {
+                out += `<span style="${HL.keyword}">${escaped}</span>`;
+            } else if (_BT.has(word)) {
+                out += `<span style="${HL.builtin}">${escaped}</span>`;
+            } else if (j < n && code[j] === '(') {
+                // Function call
+                out += `<span style="${HL.func}">${escaped}</span>`;
+            } else if (word[0] === word[0].toUpperCase() && word[0] !== '_') {
+                // Class-like (starts with uppercase)
+                out += `<span style="${HL.class}">${escaped}</span>`;
+            } else {
+                // Variable
+                out += `<span style="${HL.var}">${escaped}</span>`;
+            }
+            i = j;
+            continue;
+        }
+        // Operators
+        if ('+-*/%=<>!&|^~'.includes(code[i])) {
+            out += `<span style="${HL.op}">${escapeHtml(code[i])}</span>`;
+            i++;
+            continue;
+        }
+        // Default
+        out += escapeHtml(code[i]);
+        i++;
+    }
+    return out;
 }
 
 function escapeHtml(text) {
