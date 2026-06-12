@@ -464,7 +464,7 @@ class CoderAgent:
 
         logger.info("Agent run: skill=%s, model=%s, session=%s, task=%.100s",
                      self.skills.active_skill.name if self.skills and self.skills.active_skill else "default",
-                     routed_model,
+                     self.current_model,
                      self._current_session_id,
                      task)
 
