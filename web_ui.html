@@ -98,6 +98,7 @@ body {
     display: inline-block;
 }
 .thinking { color: var(--comment); font-style: italic; font-size: 12px; margin: 4px 0; }
+.thinking-block { color: var(--comment); font-style: italic; font-size: 12px; margin: 6px 0; padding: 6px 10px; background: var(--bg-panel); border-radius: 6px; border-left: 2px solid var(--border); white-space: pre-wrap; word-wrap: break-word; max-height: 120px; overflow-y: auto; }
 .typing { color: var(--cyan); }
 .typing::after { content: '▊'; animation: blink 0.8s infinite; }
 @keyframes blink { 50% { opacity: 0; } }
@@ -203,13 +204,13 @@ body {
     <div class="step" id="s-thinking">
       <p>Thinking strength</p>
       <select id="thinking-select">
-        <option value="">Default</option>
-        <option value="off">Off</option>
+        <option value="" selected>Default (no thinking)</option>
+        <option value="off">Off (explicit disable)</option>
         <option value="low">Low</option>
         <option value="medium">Medium</option>
         <option value="high">High</option>
         <option value="xhigh">X-High</option>
-        <option value="max">Max</option>
+        <option value="max">Max (⚠ slow, everything becomes thinking)</option>
       </select>
       <button onclick="startChat()">Start →</button>
     </div>
@@ -226,9 +227,9 @@ body {
 
   <h2>Thinking</h2>
   <select id="thinking-sidebar" onchange="setThinking()">
-    <option value="">Default</option><option value="off">Off</option>
-    <option value="low">Low</option><option value="medium">Medium</option>
-    <option value="high">High</option><option value="xhigh">X-High</option><option value="max">Max</option>
+    <option value="">Off</option><option value="low">Low</option>
+    <option value="medium">Medium</option><option value="high">High</option>
+    <option value="xhigh">X-High</option><option value="max">Max ⚠</option>
   </select>
 
   <h2>Workspace <span style="font-size:10px;color:var(--comment)">(server)</span></h2>
@@ -251,7 +252,7 @@ body {
 <script>
 /* ═══════════════════════════ State ═══════════════════════════ */
 const HOST = '';
-let config = { model: '', skill: '', thinking: '', workspace: '' };
+let config = { model: '', skill: '', thinking: '', workspace: '' }; // thinking '' = no override
 let currentMsg = null;
 let streaming = false;
 
@@ -403,10 +404,14 @@ async function send() {
                         currentMsg.innerHTML = renderMarkdown(fullText);
                         break;
                     case 'thinking':
-                        const th = document.createElement('div');
-                        th.className = 'thinking';
-                        th.textContent = '💭 ' + (ev.text || '');
-                        currentMsg.appendChild(th);
+                        // Accumulate thinking into a single dim block
+                        let th = currentMsg.querySelector('.thinking-block');
+                        if (!th) {
+                            th = document.createElement('div');
+                            th.className = 'thinking-block';
+                            currentMsg.appendChild(th);
+                        }
+                        th.textContent += (ev.text || '');
                         break;
                     case 'tool_call':
                         const tc = document.createElement('div');
@@ -440,7 +445,16 @@ async function send() {
         document.getElementById('send-btn').disabled = false;
     }
 
-    if (!fullText) currentMsg.innerHTML = renderMarkdown('*(no response)*');
+    // If model only returned thinking (no text), show the thinking as response
+    if (!fullText) {
+        const th = currentMsg.querySelector('.thinking-block');
+        if (th && th.textContent.trim()) {
+            fullText = th.textContent.trim();
+            currentMsg.innerHTML = renderMarkdown(fullText);
+        } else {
+            currentMsg.innerHTML = renderMarkdown('*(no response)*');
+        }
+    }
     clearTimeout(safetyTimer);
     streaming = false;
     document.getElementById('send-btn').disabled = false;
