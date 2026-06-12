@@ -36,6 +36,7 @@ coverage/
 junit/
 
 # Project specific
+.claude
 .ata_coder/
 __diff_*.txt
 __committed_*.py
