@@ -133,18 +133,13 @@ class LLMClient:
             body["tools"] = tool_defs
             body["tool_choice"] = "auto"
 
-        # Thinking mode — OpenAI format uses reasoning_effort
-        # low/medium → high, xhigh → max (per DeepSeek docs)
+        # Thinking mode
         thinking_strength = getattr(self.config, 'thinking_strength', '') or ''
         if thinking_strength and thinking_strength.lower() != 'off':
-            strength = thinking_strength.lower()
-            if strength in ("low", "medium"):
-                strength = "high"
-            elif strength == "xhigh":
-                strength = "max"
-            body["reasoning_effort"] = strength
-            # Thinking mode disables these params
+            body["reasoning_effort"] = thinking_strength.lower()
             body.pop("temperature", None)
+        elif getattr(self.config, 'thinking_disabled', False):
+            body["extra_body"] = {"thinking": {"type": "disabled"}}
 
         logger.debug(
             "Calling %s with %d messages, %d tools, thinking=%s",
@@ -240,13 +235,10 @@ class LLMClient:
         # Thinking mode for streaming
         thinking_strength = getattr(self.config, 'thinking_strength', '') or ''
         if thinking_strength and thinking_strength.lower() != 'off':
-            strength = thinking_strength.lower()
-            if strength in ("low", "medium"):
-                strength = "high"
-            elif strength == "xhigh":
-                strength = "max"
-            body["reasoning_effort"] = strength
+            body["reasoning_effort"] = thinking_strength.lower()
             body.pop("temperature", None)
+        elif getattr(self.config, 'thinking_disabled', False):
+            body["extra_body"] = {"thinking": {"type": "disabled"}}
 
         # Retry loop for streaming (up to 2 retries for 429/5xx)
         last_error = None
