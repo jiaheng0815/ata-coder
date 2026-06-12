@@ -347,20 +347,16 @@ def build_registry() -> CommandRegistry:
         agent = ctx["agent"]
         if level == "low":
             agent.llm.config.max_tokens = 4096
-            agent.llm.config.thinking_strength = ""
-            agent.llm.config.thinking_disabled = True
+            agent.llm.config.thinking_strength = "off"
         elif level == "medium":
             agent.llm.config.max_tokens = 16384
             agent.llm.config.thinking_strength = ""
-            agent.llm.config.thinking_disabled = False
         elif level == "high":
             agent.llm.config.max_tokens = 32768
             agent.llm.config.thinking_strength = "high"
-            agent.llm.config.thinking_disabled = False
         elif level == "max":
             agent.llm.config.max_tokens = 65536
             agent.llm.config.thinking_strength = "max"
-            agent.llm.config.thinking_disabled = False
         print(f"Effort: {level}")
         return True
 

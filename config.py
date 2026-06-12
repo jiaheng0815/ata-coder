@@ -58,10 +58,7 @@ class LLMConfig:
     )
     thinking_strength: str = field(
         default_factory=lambda: os.getenv("THINKING_STRENGTH", "")
-    )  # "" = off, "high"|"max" = enabled with specified effort
-    thinking_disabled: bool = field(
-        default=False
-    )  # Explicitly send {"thinking": {"type": "disabled"}} when True
+    )  # "" = default, "off" = explicitly disabled, "low"|"medium"|"high"|"xhigh"|"max"
 
     def validate(self) -> list[str]:
         """Validate configuration, returns list of errors."""
