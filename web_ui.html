@@ -697,14 +697,27 @@ async function runShell() {
     input.value = '';
     input.focus();
     out.textContent += cmd + '\n';
+    // Progress indicator — floating bar at bottom of terminal
+    const prog = document.createElement('div');
+    prog.style.cssText = 'color:var(--blue);font-size:11px;padding:2px 6px;display:inline-block';
+    prog.textContent = '⏳ running...';
+    out.appendChild(prog);
     out.scrollTop = out.scrollHeight;
+
+    let lineCount = 0;
+    const dots = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
+    let dotIdx = 0;
+    const spinner = setInterval(() => {
+        prog.textContent = `${dots[dotIdx]} ${lineCount} lines`;
+        dotIdx = (dotIdx + 1) % dots.length;
+    }, 150);
 
     try {
         const r = await fetch(HOST + '/api/shell', {
             method: 'POST', headers: {'Content-Type':'application/json'},
             body: JSON.stringify({session: shellSession, command: cmd}),
         });
-        if (!r.ok) { out.textContent += `HTTP ${r.status}\n`; return; }
+        if (!r.ok) { clearInterval(spinner); prog.textContent = `❌ HTTP ${r.status}`; return; }
 
         const reader = r.body.getReader();
         const decoder = new TextDecoder();
@@ -719,14 +732,18 @@ async function runShell() {
                 if (!line.startsWith('data: ')) continue;
                 try {
                     const ev = JSON.parse(line.slice(6));
-                    if (ev.text) { out.textContent += ev.text; }
+                    if (ev.text) { out.insertBefore(document.createTextNode(ev.text), prog); lineCount++; }
                 } catch(e) {}
             }
             out.scrollTop = out.scrollHeight;
         }
     } catch(e) {
-        out.textContent += `\n[ERR] ${e.message}\n`;
+        clearInterval(spinner);
+        prog.textContent = `❌ ${e.message}`;
+        return;
     }
+    clearInterval(spinner);
+    prog.remove();
     out.scrollTop = out.scrollHeight;
     if (out.textContent.length > 50000) {
         out.textContent = out.textContent.slice(-30000);
