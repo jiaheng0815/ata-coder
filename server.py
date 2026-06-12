@@ -373,24 +373,23 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
 
-        # Stream output until the next PS prompt appears (prompt = command done)
-        import re
-        ps_prompt = re.compile(r'^PS\s+\S+>')
+        # Stream output with silence-based completion detection
+        # After output stops for SILENCE_TIMEOUT seconds, command is done
+        SILENCE_TIMEOUT = 0.8
         deadline = time.time() + 30
-        line_count = 0
+        silence_dl = time.time() + SILENCE_TIMEOUT
         while time.time() < deadline:
             try:
                 line = queue.get(timeout=0.2)
-                line_count += 1
                 self.wfile.write(
                     f"data: {json.dumps({'text': line})}\n\n".encode("utf-8")
                 )
                 self.wfile.flush()
-                # PowerShell prompt appeared → command finished
-                if line_count > 1 and ps_prompt.match(line.strip()):
-                    break
+                silence_dl = time.time() + SILENCE_TIMEOUT
             except Exception:
                 pass
+            if time.time() > silence_dl:
+                break
 
         self.wfile.write(f"event: done\ndata: {json.dumps({'done': True})}\n\n".encode("utf-8"))
         self.wfile.flush()
@@ -674,18 +673,12 @@ def shell_open(cwd: str, sid: str = "") -> str:
 
     threading.Thread(target=_reader, daemon=True).start()
 
-    # Drain the initial copyright banner + first prompt
-    time.sleep(0.5)
-    initial = []
+    # Drain startup banner
+    time.sleep(0.8)
     while not out_queue.empty():
-        try: initial.append(out_queue.get_nowait())
+        try: out_queue.get_nowait()
         except: break
-    # Keep only the first prompt line
-    prompt_text = ""
-    for line in initial:
-        if line.strip().startswith("PS "):
-            prompt_text = line
-            break
+    prompt_text = "PS> "
 
     with _shell_lock:
         _shell_sessions[sid] = (proc, out_queue, threading.Lock(), prompt_text)
