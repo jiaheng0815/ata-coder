@@ -357,7 +357,7 @@ def build_registry() -> CommandRegistry:
             agent.llm.config.thinking_strength = "medium"
         elif level == "max":
             agent.llm.config.max_tokens = 65536
-            agent.llm.config.thinking_strength = "high"
+            agent.llm.config.thinking_strength = "xhigh"  # → reasoning_effort=max
         print(f"Effort: {level}")
         return True
 
