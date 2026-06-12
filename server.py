@@ -667,12 +667,17 @@ def shell_open(cwd: str, sid: str = "") -> str:
     sid = sid or uuid.uuid4().hex[:10]
     out_queue: queue.Queue[str] = queue.Queue()
 
-    # PowerShell with default prompt (shows PS C:\Users\xxx> automatically)
+    # PowerShell — use utf-8 to avoid GBK decode errors on Chinese Windows
     proc = subprocess.Popen(
         ["powershell.exe", "-NoLogo", "-NoExit"],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, text=True, bufsize=1, cwd=cwd,
+        encoding="utf-8", errors="replace",
     )
+    # Switch PS to UTF-8 output
+    proc.stdin.write("chcp 65001 >$null\n")
+    proc.stdin.write("[Console]::OutputEncoding = [Text.Encoding]::UTF8\n")
+    proc.stdin.flush()
 
     def _reader():
         for line in proc.stdout:
