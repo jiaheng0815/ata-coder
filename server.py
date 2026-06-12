@@ -373,11 +373,12 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
 
-        # Stream output with silence-based completion detection
-        # After output stops for SILENCE_TIMEOUT seconds, command is done
-        SILENCE_TIMEOUT = 0.8
-        deadline = time.time() + 30
-        silence_dl = time.time() + SILENCE_TIMEOUT
+        # Adaptive silence timeout: short for fast commands, long for slow ones
+        FAST_TIMEOUT = 0.6    # initial wait for first output
+        SLOW_TIMEOUT = 4.0    # wait between lines for slow commands (pip, git, etc.)
+        deadline = time.time() + 120
+        silence_dl = time.time() + FAST_TIMEOUT
+        has_output = False
         while time.time() < deadline:
             try:
                 line = queue.get(timeout=0.2)
@@ -385,10 +386,16 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
                     f"data: {json.dumps({'text': line})}\n\n".encode("utf-8")
                 )
                 self.wfile.flush()
-                silence_dl = time.time() + SILENCE_TIMEOUT
+                # Once we get output, switch to longer timeout for slow commands
+                has_output = True
+                silence_dl = time.time() + SLOW_TIMEOUT
             except Exception:
                 pass
             if time.time() > silence_dl:
+                # Fast commands: 0.6s silence = done. Slow commands: 4s silence = done.
+                if not has_output and time.time() < deadline - 1:
+                    silence_dl = time.time() + FAST_TIMEOUT  # keep waiting
+                    continue
                 break
 
         self.wfile.write(f"event: done\ndata: {json.dumps({'done': True})}\n\n".encode("utf-8"))

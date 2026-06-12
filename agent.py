@@ -225,6 +225,37 @@ class CoderAgent:
 
     # ── Model routing ──────────────────────────────────────────────────────
 
+    def _route_for_task(self, task: str, explicit_model: str = "") -> None:
+        """Route to the appropriate model based on task complexity + effort level."""
+        if explicit_model:
+            self._route_model(explicit_model)
+            self._routed_complexity = "explicit"
+        else:
+            settings = get_settings()
+            complexity = self._ai_classify(task)
+
+            if complexity == "simple":
+                routed_model = settings.model_haiku
+            elif complexity == "complex":
+                routed_model = settings.model_opus
+            elif complexity == "normal":
+                routed_model = settings.default_model
+            else:
+                logger.warning("Unknown complexity %r", complexity)
+                routed_model = settings.default_model
+
+            # Adjust by effort
+            effort = getattr(self.config, "effort", "medium")
+            if effort == "low":
+                routed_model = settings.model_haiku
+            elif effort in ("xhigh", "max"):
+                routed_model = settings.model_opus
+
+            self._route_model(routed_model)
+            self._routed_complexity = complexity
+
+        logger.info("Model: %s (complexity=%s)", self.current_model, self._routed_complexity)
+
     def _route_model(self, model: str) -> None:
         """Switch the LLM client to use a different model at runtime."""
         if self.llm.config.model == model:
@@ -390,38 +421,7 @@ class CoderAgent:
         self._state = AgentState(start_time=time.time())
 
         # ── Model routing ──────────────────────────────────────────────────
-        if explicit_model:
-            # User specified a model — use it directly, no classification needed
-            self._route_model(explicit_model)
-            self._routed_complexity = "explicit"
-        else:
-            # AI-driven routing: cheap model classifies → route accordingly
-            settings = get_settings()
-
-            complexity = self._ai_classify(task)
-
-            if complexity == "simple":
-                routed_model = settings.model_haiku
-            elif complexity == "complex":
-                routed_model = settings.model_opus
-            elif complexity == "normal":
-                routed_model = settings.default_model
-            else:
-                logger.warning("Unknown complexity %r, using default model", complexity)
-                routed_model = settings.default_model
-
-            # Adjust by effort level
-            effort = getattr(self.config, "effort", "medium")
-            if effort == "low":
-                routed_model = settings.model_haiku
-            elif effort in ("xhigh", "max"):
-                routed_model = settings.model_opus
-            # high/medium use the complexity-based route as-is
-
-            self._route_model(routed_model)
-            self._routed_complexity = complexity
-
-        logger.info("Model: %s (complexity=%s)", self.current_model, self._routed_complexity)
+        self._route_for_task(task, explicit_model)
 
         # Trigger extension point: on_model_route
         self._ep_on_model_route.trigger(
