@@ -218,7 +218,9 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parts = self._path_parts()
 
-        if self.path == "/health":
+        if self.path == "/" or self.path == "/index.html":
+            self._serve_spa()
+        elif self.path == "/health":
             self._handle_health()
         elif self.path == "/tools":
             self._handle_tools()
@@ -228,18 +230,23 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
             self._handle_models()
         elif self.path == "/sessions":
             self._handle_list_sessions()
+        elif self.path == "/api/workspace":
+            self._json_response({"workspace": self.config.agent.workspace_dir})
         elif len(parts) == 2 and parts[0] == "sessions":
             self._handle_get_session(parts[1])
         else:
             self._error(404, f"Not found: {self.path}")
 
     def do_POST(self):
-        if not self._require_auth("POST"):
-            return
+        if self.path == "/chat" or self.path == "/chat/stream":
+            if not self._require_auth("POST"):
+                return
         if self.path == "/chat":
             self._handle_chat()
         elif self.path == "/chat/stream":
             self._handle_chat_stream()
+        elif self.path == "/api/workspace":
+            self._handle_set_workspace()
         else:
             self._error(404, f"Not found: {self.path}")
 
@@ -283,14 +290,48 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
         })
 
     def _handle_models(self):
-        """Return available models (cached from startup)."""
+        """Fetch available models from API if possible, else return cached."""
+        try:
+            from .model_registry import fetch_available_models
+            models = fetch_available_models(self.config.llm.base_url, self.config.llm.api_key)
+            if models:
+                models_data = [{"id": m, "owned_by": "api"} for m in sorted(models)]
+                self._json_response({"models": models_data, "current": self.config.llm.model})
+                return
+        except Exception:
+            pass
+        # Fallback: cached model list
         import os
         cached = os.environ.get("ATA_CODER_MODELS_CACHE", self.config.llm.model)
         models = [{"id": m.strip(), "owned_by": ""} for m in cached.split(",") if m.strip()]
-        self._json_response({
-            "models": models,
-            "current": self.config.llm.model,
-        })
+        self._json_response({"models": models, "current": self.config.llm.model})
+
+    def _handle_set_workspace(self):
+        """Change the agent workspace directory."""
+        body = self._read_body()
+        new_ws = body.get("workspace", "")
+        if not new_ws:
+            self._error(400, "Missing 'workspace' field")
+            return
+        p = Path(new_ws).expanduser().resolve()
+        if not p.exists():
+            self._error(400, f"Directory not found: {p}")
+            return
+        self.config.agent.workspace_dir = str(p)
+        self._json_response({"workspace": str(p), "ok": True})
+
+    def _serve_spa(self):
+        """Serve the single-page web UI."""
+        spa_html = Path(__file__).parent / "web_ui.html"
+        if spa_html.exists():
+            content = spa_html.read_text(encoding="utf-8")
+        else:
+            content = "<h1>ATA Coder Web UI</h1><p>web_ui.html not found.</p>"
+        self.send_response(200)
+        self._cors()
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(content.encode("utf-8"))
 
     def _handle_list_sessions(self):
         self._json_response({"sessions": self.store.list_sessions()})
@@ -328,8 +369,16 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
 
         session_id = body.get("session_id")
         skill = body.get("skill", "")
+        model_override = body.get("model", "")
+        thinking_override = body.get("thinking", "")
 
         sid, agent = self.store.get_or_create(session_id, self.config, skill)
+
+        if model_override:
+            agent.llm.set_model(model_override)
+            agent.llm.register_tools(agent._all_tools)
+        if thinking_override:
+            agent.llm.config.thinking_strength = thinking_override
 
         try:
             response = agent.run(message, stream=False, skill_name=skill or None)
@@ -371,8 +420,16 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
 
         session_id = body.get("session_id")
         skill = body.get("skill", "")
+        model_override = body.get("model", "")
+        thinking_override = body.get("thinking", "")
 
         sid, agent = self.store.get_or_create(session_id, self.config, skill)
+
+        if model_override:
+            agent.llm.set_model(model_override)
+            agent.llm.register_tools(agent._all_tools)
+        if thinking_override:
+            agent.llm.config.thinking_strength = thinking_override
 
         # Send SSE headers
         self.send_response(200)
@@ -520,11 +577,16 @@ def main():
 
     server = create_server(config, args.host, args.port)
 
+    web_url = f"http://{args.host}:{args.port}"
+    if args.host == "0.0.0.0":
+        web_url = f"http://127.0.0.1:{args.port}"
+
     print(f"""
 ╔══════════════════════════════════════════╗
-║     ATA Coder API Server            ║
+║       ATA Coder API Server          ║
 ╠══════════════════════════════════════════╣
-║  URL:    http://{args.host}:{args.port}
+║  Web UI: {web_url:<29}║
+║  API:    http://{args.host}:{args.port}
 ║  Model:  {config.llm.model:<30}║
 ║  Tools:  {len(TOOL_DEFINITIONS):<30}║
 ╚══════════════════════════════════════════╝
