@@ -26,15 +26,22 @@ Message = dict[str, Any]           # OpenAI message dict
 # ── System prompt for the coding agent ───────────────────────────────────────
 
 def _load_system_prompt() -> str:
-    """Load the system prompt from codecraft_prompt.txt, with fallback."""
+    """Load fallback system prompt from skills/codecraft/SKILL.md if available."""
+    import re
     from pathlib import Path
-    prompt_file = Path(__file__).parent / "codecraft_prompt.txt"
+    # Try new location: skills/codecraft/SKILL.md
+    prompt_file = Path(__file__).parent / "skills" / "codecraft" / "SKILL.md"
     if prompt_file.exists():
         try:
-            return prompt_file.read_text(encoding="utf-8")
+            raw = prompt_file.read_text(encoding="utf-8")
+            # Strip YAML frontmatter to get the prompt body
+            match = re.match(r"^---\s*\n(.*?)\n---\s*\n(.*)", raw, re.DOTALL)
+            if match:
+                return match.group(2).strip()
+            return raw
         except Exception:
             pass
-    # Fallback — compact prompt when the file is missing
+    # Fallback
     return "You are an expert software engineer. Write correct, secure, maintainable code."
 
 SYSTEM_PROMPT = _load_system_prompt()
