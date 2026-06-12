@@ -472,11 +472,14 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
                 print(_json.dumps(ev, ensure_ascii=False))
                 with events_lock:
                     events.append(("text", event.text))
-            elif isinstance(event, (ReasoningEvent, ThinkingEvent)):
+            elif isinstance(event, ReasoningEvent):
                 ev = {"type": "thinking", "text": event.text[:300]}
                 print(_json.dumps(ev, ensure_ascii=False))
                 with events_lock:
                     events.append(("thinking", event.text[:200]))
+            elif isinstance(event, ThinkingEvent):
+                # Marker event — thinking is happening, no text content
+                pass
             elif isinstance(event, ToolCallEvent):
                 ev = {"type": "tool_call", "tool": event.tool_name, "source": event.source, "args": _brief_dict(event.arguments)}
                 print(_json.dumps(ev, ensure_ascii=False))
