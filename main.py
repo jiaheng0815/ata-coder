@@ -540,9 +540,6 @@ def _setup(config, kwargs):
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
-    # First-run setup: prompt for API config if ~/.ata_coder is missing
-    _ensure_first_run()
-
     from .settings import init_settings
     init_settings()
 
@@ -601,6 +598,9 @@ def cli(ctx, **kwargs):
     if ctx.invoked_subcommand is not None:
         return
 
+    # First-run setup BEFORE config validation
+    _ensure_first_run()
+
     config = get_config()
     _setup(config, kwargs)
     ctx.obj = {"config": config, "kwargs": kwargs}
@@ -613,6 +613,7 @@ def cli(ctx, **kwargs):
 @click.pass_context
 def run_cmd(ctx, task):
     """Run a single task."""
+    _ensure_first_run()
     config = get_config()
     kwargs = ctx.obj.get("kwargs", {}) if ctx.obj else {}
     _setup(config, kwargs)
@@ -625,6 +626,7 @@ def run_cmd(ctx, task):
 @click.pass_context
 def server_cmd(ctx, port, host, **kwargs):
     """Start HTTP API server."""
+    _ensure_first_run()
     config = get_config()
     group_kwargs = ctx.obj.get("kwargs", {}) if ctx.obj else {}
     group_kwargs.update(kwargs)
