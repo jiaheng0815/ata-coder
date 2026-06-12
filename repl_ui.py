@@ -124,20 +124,24 @@ ONE_DARK_THEME = Theme({
 
 ONE_DARK_SYNTAX = {
     "background":       "#282C34",
-    "default":          "#ABB2BF",    # variables, punctuation
-    "keyword":          "#E06C75",    # if, else, for, while, return, import, class
-    "string":           "#E5C07B",    # "strings", 'strings'
-    "number":           "#56B6C2",    # 42, 3.14, 0xFF
-    "name.function":    "#98C379",    # function_names(), method_calls()
-    "name.class":       "#E5C07B",    # ClassName, Interface, Enum
-    "name.tag":         "#E06C75",    # <HTML>, </tags>
-    "name.attribute":   "#ABB2BF",    # obj.property
-    "operator":         "#ABB2BF",    # + - * / = => ===
-    "comment":          "#5C6370",    # // /* */
+    "default":          "#ABB2BF",    # default text
+    "keyword":          "#C678DD",    # def, class, if, for, return, import (purple)
+    "keyword.namespace":"#C678DD",
+    "string":           "#98C379",    # "hello" (green)
+    "number":           "#D19A66",    # 42, 3.14 (orange)
+    "name.function":    "#61AFEF",    # my_func() (blue)
+    "name.class":       "#E5C07B",    # ClassName (yellow)
+    "name.tag":         "#E06C75",    # <div> (red)
+    "name.attribute":   "#E06C75",    # obj.attr (red — like variables)
+    "name":             "#E06C75",    # variables (red)
+    "name.builtin":     "#56B6C2",    # print, len (cyan)
+    "name.constant":    "#D19A66",    # None, True, False (orange bold)
+    "name.decorator":   "#E5C07B",    # @decorator (yellow)
+    "operator":         "#56B6C2",    # + - * / (cyan)
+    "operator.word":    "#C678DD",    # and, or, not, in, is (purple)
+    "comment":          "#5C6370",    # # comment (gray italic)
     "comment.line":     "#5C6370",
     "punctuation":      "#ABB2BF",    # ( ) [ ] { } , ; .
-    "name.builtin":     "#56B6C2",    # console, Array, parseInt
-    "name.constant":    "#56B6C2",    # null, undefined, true, false
 } if HAS_RICH else {}
 
 try:
@@ -758,7 +762,7 @@ class ClaudeCodeUI:
                 syntax = Syntax(
                     self._code_buffer,
                     self._code_lang if self._code_lang else "text",
-                    theme="default",
+                    theme=ONE_DARK_SYNTAX,
                     line_numbers=False,
                     word_wrap=False,
                     background_color="#282C34",
