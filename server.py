@@ -440,7 +440,9 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
         if thinking_override: print(f"   thinking={thinking_override}")
         print(f"{'─'*60}")
 
+        print(f"[stream] creating agent session...", flush=True)
         sid, agent = self.store.get_or_create(session_id, self.config, skill)
+        print(f"[stream] session={sid}", flush=True)
 
         if model_override:
             agent.llm.set_model(model_override)
@@ -448,7 +450,7 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
         if thinking_override:
             agent.llm.config.thinking_strength = thinking_override
 
-        # Send SSE headers
+        print(f"[stream] sending SSE headers...", flush=True)
         self.send_response(200)
         self._cors()
         self.send_header("Content-Type", "text/event-stream")
@@ -503,12 +505,16 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
 
         def run_agent():
             try:
+                print(f"[stream] agent.run starting...", flush=True)
                 result_holder["response"] = agent.run(message, stream=True, skill_name=skill or None)
+                print(f"[stream] agent.run completed", flush=True)
             except Exception as e:
+                print(f"[stream] agent.run error: {e}", flush=True)
                 result_holder["error"] = str(e)
 
-        thread = threading.Thread(target=run_agent)
+        thread = threading.Thread(target=run_agent, daemon=True)
         thread.start()
+        print(f"[stream] agent thread started, streaming events...", flush=True)
 
         # Stream events
         last_idx = 0
