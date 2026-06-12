@@ -373,20 +373,20 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
         deadline = time.time() + 30
-        collected = ""
+        silence_deadline = time.time() + 1.5  # end after 1.5s of silence
         while time.time() < deadline:
             try:
-                line = queue.get(timeout=0.15)
-                collected += line
+                line = queue.get(timeout=0.3)
                 self.wfile.write(
                     f"data: {json.dumps({'text': line})}\n\n".encode("utf-8")
                 )
                 self.wfile.flush()
-                # A PowerShell prompt in the output means the command finished
-                if _looks_like_prompt(line) and len(collected) > 50:
-                    break
+                silence_deadline = time.time() + 1.5
             except Exception:
                 pass
+            # End when queue goes silent (command completed)
+            if time.time() > silence_deadline:
+                break
 
         self.wfile.write(f"event: done\ndata: {json.dumps({'done': True})}\n\n".encode("utf-8"))
         self.wfile.flush()
@@ -659,7 +659,7 @@ def shell_open(cwd: str, sid: str = "") -> str:
 
     proc = subprocess.Popen(
         ["powershell.exe", "-NoLogo", "-NoExit", "-Command",
-         f"cd '{cwd}'; function prompt {{ 'PS ' + (Get-Location).Path + '> ' }}"],
+         f"cd '{cwd}'; function prompt {{ 'PS> ' }}"],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, text=True, bufsize=1, cwd=cwd,
     )
@@ -669,6 +669,12 @@ def shell_open(cwd: str, sid: str = "") -> str:
             out_queue.put(line)
 
     threading.Thread(target=_reader, daemon=True).start()
+
+    # Drain startup output (copyright banner etc)
+    time.sleep(0.3)
+    while not out_queue.empty():
+        try: out_queue.get_nowait()
+        except: break
 
     with _shell_lock:
         _shell_sessions[sid] = (proc, out_queue, threading.Lock())
