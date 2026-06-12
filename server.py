@@ -216,6 +216,8 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
     # ── Routing ─────────────────────────────────────────────────────────
 
     def do_GET(self):
+        if self.path != "/favicon.ico":
+            print(f"[GET] {self.path}", flush=True)
         parts = self._path_parts()
 
         if self.path == "/" or self.path == "/index.html":
@@ -238,7 +240,7 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
             self._error(404, f"Not found: {self.path}")
 
     def do_POST(self):
-        # Auth is optional for local/LAN use (web UI is served from same origin)
+        print(f"[POST] {self.path}", flush=True)
         if self.path == "/chat":
             self._handle_chat()
         elif self.path == "/chat/stream":
@@ -410,13 +412,17 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
     # ── Chat (SSE streaming) ────────────────────────────────────────────
 
     def _handle_chat_stream(self):
+        cl = int(self.headers.get("Content-Length", 0))
+        print(f"[stream] Content-Length={cl}", flush=True)
         try:
             body = self._read_body()
-        except Exception:
+        except Exception as e:
+            print(f"[stream] body read error: {e}", flush=True)
             self._error(400, "Invalid JSON body")
             return
 
         message = body.get("message", "")
+        print(f"[stream] message={message[:100]!r}", flush=True)
         if not message:
             self._error(400, "Missing 'message' field")
             return

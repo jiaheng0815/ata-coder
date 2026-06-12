@@ -339,11 +339,14 @@ async function startChat() {
 async function send() {
     const input = document.getElementById('input');
     const msg = input.value.trim();
-    if (!msg || streaming) return;
+    if (!msg) return;
+    if (streaming) { console.log('send blocked: already streaming'); return; }
     input.value = '';
     input.style.height = 'auto';
     document.getElementById('send-btn').disabled = true;
     streaming = true;
+    // Safety: reset streaming after 5 minutes
+    const safetyTimer = setTimeout(() => { streaming = false; document.getElementById('send-btn').disabled = false; }, 300000);
 
     appendMessage('user', msg);
 
@@ -371,6 +374,7 @@ async function send() {
         if (!r.ok) {
             const err = await r.json().catch(() => ({}));
             currentMsg.innerHTML = `<span style="color:var(--red)">HTTP ${r.status}: ${err.error || r.statusText}</span>`;
+            clearTimeout(safetyTimer);
             streaming = false;
             document.getElementById('send-btn').disabled = false;
             return;
@@ -414,9 +418,13 @@ async function send() {
         }
     } catch(e) {
         currentMsg.innerHTML = `<span style="color:var(--red)">Connection error: ${e.message}</span>`;
+        clearTimeout(safetyTimer);
+        streaming = false;
+        document.getElementById('send-btn').disabled = false;
     }
 
     if (!fullText) currentMsg.innerHTML = renderMarkdown('*(no response)*');
+    clearTimeout(safetyTimer);
     streaming = false;
     document.getElementById('send-btn').disabled = false;
     document.getElementById('input').focus();
