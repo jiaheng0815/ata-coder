@@ -556,7 +556,6 @@ document.getElementById('input').addEventListener('input', function() {
 
 /* ═══════════════════════════ Terminal ═══════════════════════════ */
 let shellSession = '';
-let shellBusy = false;
 
 async function toggleTerm() {
     const p = document.getElementById('term-panel');
@@ -584,19 +583,19 @@ async function runShell() {
     const input = document.getElementById('term-input');
     const out = document.getElementById('term-output');
     const cmd = input.value.trim();
-    if (!cmd || shellBusy) return;
+    if (!cmd) return;
     if (!shellSession) { await openShell(); if (!shellSession) return; }
     input.value = '';
+    input.focus();
     out.textContent += cmd + '\n';
     out.scrollTop = out.scrollHeight;
-    shellBusy = true;
 
     try {
         const r = await fetch(HOST + '/api/shell', {
             method: 'POST', headers: {'Content-Type':'application/json'},
             body: JSON.stringify({session: shellSession, command: cmd}),
         });
-        if (!r.ok) { out.textContent += `HTTP ${r.status}\n`; shellBusy = false; return; }
+        if (!r.ok) { out.textContent += `HTTP ${r.status}\n`; return; }
 
         const reader = r.body.getReader();
         const decoder = new TextDecoder();
@@ -617,12 +616,9 @@ async function runShell() {
             out.scrollTop = out.scrollHeight;
         }
     } catch(e) {
-        out.textContent += `[ERROR] ${e.message}\n`;
-        shellSession = ''; // Reconnect on next command
+        out.textContent += `\n[ERR] ${e.message}\n`;
     }
-    shellBusy = false;
     out.scrollTop = out.scrollHeight;
-    // Trim old output to prevent memory issues
     if (out.textContent.length > 50000) {
         out.textContent = out.textContent.slice(-30000);
     }
