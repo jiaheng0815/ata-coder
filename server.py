@@ -333,7 +333,8 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
         # Open new session
         if action == "open":
             sid = shell_open(self.config.agent.workspace_dir)
-            self._json_response({"session": sid, "prompt": f"PS {self.config.agent.workspace_dir}> "})
+            _, _, _, prompt = _shell_sessions.get(sid, (None, None, None, "PS> "))
+            self._json_response({"session": sid, "prompt": prompt})
             return
 
         # Close session
@@ -352,12 +353,12 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
 
         print(f"💻 [{sid[:6]}] {command[:120]}", flush=True)
 
-        proc, queue, lock = shell_ensure(sid, self.config.agent.workspace_dir)
+        proc, queue, lock, prompt = shell_ensure(sid, self.config.agent.workspace_dir)
         if not proc:
             self._error(500, "Shell process not running")
             return
 
-        # Drain any pending output before sending command
+        # Drain any stale output, send command
         with lock:
             while not queue.empty():
                 try: queue.get_nowait()
@@ -372,21 +373,24 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
 
+        # Stream output until the next PS prompt appears (prompt = command done)
+        import re
+        ps_prompt = re.compile(r'^PS\s+\S+>')
         deadline = time.time() + 30
-        silence_deadline = time.time() + 1.5  # end after 1.5s of silence
+        line_count = 0
         while time.time() < deadline:
             try:
-                line = queue.get(timeout=0.3)
+                line = queue.get(timeout=0.2)
+                line_count += 1
                 self.wfile.write(
                     f"data: {json.dumps({'text': line})}\n\n".encode("utf-8")
                 )
                 self.wfile.flush()
-                silence_deadline = time.time() + 1.5
+                # PowerShell prompt appeared → command finished
+                if line_count > 1 and ps_prompt.match(line.strip()):
+                    break
             except Exception:
                 pass
-            # End when queue goes silent (command completed)
-            if time.time() > silence_deadline:
-                break
 
         self.wfile.write(f"event: done\ndata: {json.dumps({'done': True})}\n\n".encode("utf-8"))
         self.wfile.flush()
@@ -648,7 +652,7 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
 # Persistent PowerShell sessions for interactive terminal
 # ═══════════════════════════════════════════════════════════════════════════════
 
-_shell_sessions: dict[str, tuple[subprocess.Popen, "queue.Queue[str]", threading.Lock]] = {}
+_shell_sessions: dict[str, tuple[subprocess.Popen, "queue.Queue[str]", threading.Lock, str]] = {}
 _shell_lock = threading.Lock()
 
 def shell_open(cwd: str, sid: str = "") -> str:
@@ -657,9 +661,9 @@ def shell_open(cwd: str, sid: str = "") -> str:
     sid = sid or uuid.uuid4().hex[:10]
     out_queue: queue.Queue[str] = queue.Queue()
 
+    # PowerShell with default prompt (shows PS C:\Users\xxx> automatically)
     proc = subprocess.Popen(
-        ["powershell.exe", "-NoLogo", "-NoExit", "-Command",
-         f"cd '{cwd}'; function prompt {{ 'PS> ' }}"],
+        ["powershell.exe", "-NoLogo", "-NoExit"],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, text=True, bufsize=1, cwd=cwd,
     )
@@ -670,14 +674,21 @@ def shell_open(cwd: str, sid: str = "") -> str:
 
     threading.Thread(target=_reader, daemon=True).start()
 
-    # Drain startup output (copyright banner etc)
-    time.sleep(0.3)
+    # Drain the initial copyright banner + first prompt
+    time.sleep(0.5)
+    initial = []
     while not out_queue.empty():
-        try: out_queue.get_nowait()
+        try: initial.append(out_queue.get_nowait())
         except: break
+    # Keep only the first prompt line
+    prompt_text = ""
+    for line in initial:
+        if line.strip().startswith("PS "):
+            prompt_text = line
+            break
 
     with _shell_lock:
-        _shell_sessions[sid] = (proc, out_queue, threading.Lock())
+        _shell_sessions[sid] = (proc, out_queue, threading.Lock(), prompt_text)
     print(f"💻 Shell opened: {sid}", flush=True)
     return sid
 
@@ -689,13 +700,13 @@ def shell_ensure(sid: str, cwd: str):
     # Auto-create with the requested SID
     shell_open(cwd, sid=sid)
     with _shell_lock:
-        return _shell_sessions.get(sid, (None, None, None))
+        return _shell_sessions.get(sid, (None, None, None, ""))
 
 def shell_close(sid: str):
     with _shell_lock:
         entry = _shell_sessions.pop(sid, None)
     if entry:
-        proc, _, _ = entry
+        proc, _, _, _ = entry
         try:
             proc.stdin.write("exit\n")
             proc.stdin.flush()
@@ -703,12 +714,6 @@ def shell_close(sid: str):
         except Exception:
             proc.kill()
         print(f"💻 Shell closed: {sid}", flush=True)
-
-def _looks_like_prompt(line: str) -> bool:
-    """Heuristic: does this line look like a PowerShell prompt?"""
-    s = line.strip()
-    return (s.startswith("PS ") and ">" in s) or s == ">"
-
 
 def create_server(
     config: AppConfig | None = None,
