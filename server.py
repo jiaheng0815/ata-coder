@@ -584,7 +584,7 @@ def main():
     parser.add_argument("--host", default="0.0.0.0", help="Bind host (0.0.0.0 = LAN accessible)")
     parser.add_argument("--port", "-p", type=int, default=8000, help="Bind port")
     parser.add_argument("--local-only", action="store_true", help="Bind to 127.0.0.1 only (no LAN)")
-    parser.add_argument("--allow-all", "-A", action="store_true", help="Skip permission prompts")
+    parser.add_argument("--allow-all", "-A", action="store_true", help="Skip all permission prompts")
     parser.add_argument("--model", "-m", help="Model name")
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()

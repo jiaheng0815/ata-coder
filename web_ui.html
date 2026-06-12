@@ -189,7 +189,7 @@ body {
     </div>
 
     <div class="step" id="s-workspace">
-      <p>Choose working directory</p>
+      <p>Working directory <span style="color:var(--comment);font-size:11px">(on server)</span></p>
       <input id="workspace-path" placeholder="D:\projects\my-app">
       <button onclick="nextStep('skill')">Next →</button>
     </div>
@@ -231,7 +231,7 @@ body {
     <option value="high">High</option><option value="xhigh">X-High</option><option value="max">Max</option>
   </select>
 
-  <h2>Workspace</h2>
+  <h2>Workspace <span style="font-size:10px;color:var(--comment)">(server)</span></h2>
   <input id="ws-sidebar" onchange="setWorkspace()">
 
   <div style="flex:1"></div>
