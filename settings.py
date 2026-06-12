@@ -280,10 +280,16 @@ def _find_source_dir(name: str) -> Path | None:
 
 
 def _seed_skills(settings: Settings) -> None:
-    """Copy default skill files from project source to ~/.ata_coder/skills/ if empty."""
+    """Copy skill folders from project source to ~/.ata_coder/skills/ if empty."""
     target = settings.skills_dir
-    if list(target.glob("*.md")):
-        return  # already has skills
+
+    # Check if skills already exist (folder-based or flat legacy)
+    has_skills = any(
+        (d / "SKILL.md").exists() or (d / "manifest.json").exists()
+        for d in target.iterdir() if d.is_dir()
+    )
+    if has_skills:
+        return
 
     source = _find_source_dir("skills")
     if not source:
@@ -291,11 +297,23 @@ def _seed_skills(settings: Settings) -> None:
         return
 
     target.mkdir(parents=True, exist_ok=True)
+    # Copy skill folders
+    for d in source.iterdir():
+        if d.is_dir() and not d.name.startswith("."):
+            dest = target / d.name
+            if not dest.exists():
+                shutil.copytree(d, dest)
+                logger.info("Seeded skill folder: %s", d.name)
+    # Also copy legacy flat files
     for fp in source.glob("*.md"):
-        shutil.copy2(fp, target / fp.name)
-        logger.info("Seeded skill: %s → %s", fp.name, target / fp.name)
+        dest = target / fp.name
+        if not dest.exists():
+            shutil.copy2(fp, dest)
+            logger.info("Seeded skill: %s", fp.name)
     for fp in source.glob("*.json"):
-        shutil.copy2(fp, target / fp.name)
+        dest = target / fp.name
+        if not dest.exists():
+            shutil.copy2(fp, dest)
 
 
 def _seed_memories(settings: Settings) -> None:
