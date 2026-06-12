@@ -697,27 +697,28 @@ async function runShell() {
     input.value = '';
     input.focus();
     out.textContent += cmd + '\n';
-    // Progress indicator — floating bar at bottom of terminal
+    // Progress indicator
     const prog = document.createElement('div');
-    prog.style.cssText = 'color:var(--blue);font-size:11px;padding:2px 6px;display:inline-block';
-    prog.textContent = '⏳ running...';
+    prog.style.cssText = 'color:var(--comment);font-size:11px;padding:2px 6px';
+    prog.textContent = 'Running...';
     out.appendChild(prog);
     out.scrollTop = out.scrollHeight;
 
     let lineCount = 0;
-    const dots = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
-    let dotIdx = 0;
+    const frames = ['|','/','-','\\'];
+    let fi = 0;
     const spinner = setInterval(() => {
-        prog.textContent = `${dots[dotIdx]} ${lineCount} lines`;
-        dotIdx = (dotIdx + 1) % dots.length;
-    }, 150);
+        const info = lineCount > 0 ? ` (${lineCount} lines)` : '';
+        prog.textContent = `${frames[fi]} Running...${info}`;
+        fi = (fi + 1) % frames.length;
+    }, 200);
 
     try {
         const r = await fetch(HOST + '/api/shell', {
             method: 'POST', headers: {'Content-Type':'application/json'},
             body: JSON.stringify({session: shellSession, command: cmd}),
         });
-        if (!r.ok) { clearInterval(spinner); prog.textContent = `❌ HTTP ${r.status}`; return; }
+        if (!r.ok) { clearInterval(spinner); prog.textContent = `✗ HTTP ${r.status}`; return; }
 
         const reader = r.body.getReader();
         const decoder = new TextDecoder();
@@ -739,11 +740,12 @@ async function runShell() {
         }
     } catch(e) {
         clearInterval(spinner);
-        prog.textContent = `❌ ${e.message}`;
+        prog.textContent = `✗ ${e.message}`;
         return;
     }
     clearInterval(spinner);
-    prog.remove();
+    prog.textContent = `✓ Done (${lineCount} lines)`;
+    setTimeout(() => prog.remove(), 2000);
     out.scrollTop = out.scrollHeight;
     if (out.textContent.length > 50000) {
         out.textContent = out.textContent.slice(-30000);
