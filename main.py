@@ -156,8 +156,16 @@ def _ensure_first_run() -> None:
     settings_dir = Path.home() / ".ata_coder"
     settings_file = settings_dir / "settings.json"
 
+    # Check if already configured with a valid API key
     if settings_file.exists():
-        return  # Already configured
+        try:
+            import json as _json
+            raw = settings_file.read_text(encoding="utf-8")
+            data = _json.loads(raw)
+            if data.get("api", {}).get("api_key", "").strip():
+                return  # Already configured
+        except Exception:
+            pass  # Corrupt file → re-prompt
 
     print()
     print("=" * 56)
@@ -547,11 +555,10 @@ def _setup(config, kwargs):
 
     errors = config.llm.validate()
     if errors:
-        click.echo("\n[!] Configuration:")
+        click.echo("\n[!] Configuration:", err=True)
         for e in errors:
-            click.echo(f"  - {e}")
-        click.echo("\nSet OPENAI_API_KEY in .env or use --api-key.")
-        raise SystemExit(1)
+            click.echo(f"  - {e}", err=True)
+        click.echo("  Run 'ata' in interactive mode to set up your API key.\n", err=True)
 
 
 # Shared click options

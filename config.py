@@ -159,24 +159,9 @@ class AppConfig:
 
     @classmethod
     def load(cls) -> "AppConfig":
-        """Load and validate all configuration."""
+        """Load and validate all configuration (errors logged by caller)."""
         _ensure_env()
         config = cls()
-        errors = config.llm.validate()
-        if errors:
-            try:
-                print("\n[!] Configuration errors:")
-            except UnicodeEncodeError:
-                pass
-            for e in errors:
-                try:
-                    print(f"  - {e}")
-                except UnicodeEncodeError:
-                    print(f"  - {e.encode('ascii', errors='replace').decode('ascii')}")
-            try:
-                print()
-            except UnicodeEncodeError:
-                pass
         return config
 
 
