@@ -69,7 +69,7 @@ export class AgentBridge implements Disposable {
     });
 
     this.#process.stderr?.on("data", (chunk: Buffer) => {
-      this.#logger.debug("[agent-bridge:stderr] %s", chunk.toString().trim());
+      this.#logger.warn("[agent-bridge:stderr] %s", chunk.toString().trim());
     });
 
     this.#process.on("exit", (code, signal) => {

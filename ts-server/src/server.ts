@@ -352,12 +352,16 @@ class AtaCoderServer implements Disposable {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  #readBody(req: IncomingMessage): Promise<string> {
+  #readBody(req: IncomingMessage, timeoutMs = 30_000): Promise<string> {
     return new Promise<string>((resolve, reject) => {
       const chunks: Buffer[] = [];
+      const timer = setTimeout(() => {
+        req.destroy();
+        reject(new Error(`Request body timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
       req.on("data", (chunk: Buffer) => chunks.push(chunk));
-      req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
-      req.on("error", reject);
+      req.on("end", () => { clearTimeout(timer); resolve(Buffer.concat(chunks).toString("utf-8")); });
+      req.on("error", (err) => { clearTimeout(timer); reject(err); });
     });
   }
 }
