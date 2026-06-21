@@ -39,12 +39,7 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run tests
-        run: |
-          # Skip server tests (HTTPServer blocks on Windows); skip macOS-only tests
-          python -m pytest tests/ -v \
-            --timeout=60 \
-            --ignore=tests/test_server.py \
-            -k "not (TestCreateServer or TestAgentAPIHandler)"
+        run: python -m pytest tests/ -v --timeout=60 --ignore=tests/test_server.py -k "not (TestCreateServer or TestAgentAPIHandler)"
 
   lint-python:
     name: Lint (Python + Ruff)
