@@ -160,7 +160,7 @@ class ToolExecutor(FileOpsMixin, ShellExecMixin, SearchToolsMixin, WebToolsMixin
                 try:
                     cached.unlink()
                 except Exception:
-                    pass
+                    logger.debug("Failed to unlink cached file %s", cached)
 
     def close(self) -> None:
         """Release all held resources (httpx clients, file caches)."""
@@ -169,7 +169,7 @@ class ToolExecutor(FileOpsMixin, ShellExecMixin, SearchToolsMixin, WebToolsMixin
             try:
                 self._http.close()
             except Exception:
-                pass
+                logger.debug("Failed to close httpx client")
             self._http = None
 
     def __del__(self) -> None:
@@ -191,7 +191,7 @@ class ToolExecutor(FileOpsMixin, ShellExecMixin, SearchToolsMixin, WebToolsMixin
             try:
                 self.close()
             except Exception:
-                pass
+                logger.debug("ToolExecutor.__del__ cleanup failed")
 
     def on_edit(self, callback: Callable[[str, str], None]) -> None:
         """Register callback for edit notifications: callback(file_path, old_content)."""
