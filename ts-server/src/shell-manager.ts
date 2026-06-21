@@ -162,7 +162,15 @@ export class ShellManager implements Disposable {
     entry.lastOutput = "";
     // Use a unique end marker to detect command completion
     const endMarker = `__END_${randomUUID().replace(/-/g, "")}__`;
-    const fullCommand = `${command}\necho ${endMarker}%ERRORLEVEL%\n`;
+    // Exit-code syntax varies by shell:
+    //   cmd.exe      → %ERRORLEVEL%
+    //   powershell   → $LASTEXITCODE
+    //   bash / sh    → $?
+    const shellKind = entry.session.shell;
+    const exitVar = shellKind === "powershell" ? "$LASTEXITCODE"
+                  : shellKind === "bash" ? "$?"
+                  : "%ERRORLEVEL%";
+    const fullCommand = `${command}\necho ${endMarker}${exitVar}\n`;
 
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
