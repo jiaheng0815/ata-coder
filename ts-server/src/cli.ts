@@ -76,7 +76,10 @@ async function firstRunWizard(force = false): Promise<void> {
 async function runInteractive(config: AppConfig): Promise<void> {
   printBanner(config);
 
-  using bridge = new AgentBridge("python", config.agent.workspaceDir);
+  // Prefer ATA_CODER_PYTHON env var; fall back to "python3" on non-Windows, "python" otherwise.
+  const pythonPath = process.env.ATA_CODER_PYTHON
+    ?? (process.platform === "win32" ? "python" : "python3");
+  using bridge = new AgentBridge(pythonPath, config.agent.workspaceDir);
   using sessions = new SessionStore();
   using memory = new MemoryStore();
   using changes = new ChangeTracker();
@@ -160,10 +163,9 @@ async function runInteractive(config: AppConfig): Promise<void> {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function runTask(config: AppConfig, task: string): Promise<void> {
-  using bridge = new AgentBridge(
-    config.llm.apiKey ? "python" : "python",
-    config.agent.workspaceDir,
-  );
+  const pythonPath = process.env.ATA_CODER_PYTHON
+    ?? (process.platform === "win32" ? "python" : "python3");
+  using bridge = new AgentBridge(pythonPath, config.agent.workspaceDir);
 
   console.log(`  Task: ${task.slice(0, 80)}${task.length > 80 ? "…" : ""}`);
   console.log(`  Model: ${config.llm.model}\n`);
