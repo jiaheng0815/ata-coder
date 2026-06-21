@@ -147,7 +147,7 @@ def shell_close(sid: str):
     with _shell_lock:
         entry = _shell_sessions.pop(sid, None)
     if entry:
-        proc, _, _, _ = entry
+        proc, _, _, _, _ = entry
         try:
             proc.stdin.write(b"exit\n")
             proc.stdin.flush()

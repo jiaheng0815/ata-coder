@@ -851,3 +851,4 @@ class CoderAgent(CompactionMixin, ToolExecutionMixin,
             await self._summary_llm.close()
         if self.mcp:
             await self.mcp.stop_all()
+        self.tools.close()

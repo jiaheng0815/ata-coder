@@ -428,7 +428,7 @@ def create_server(
     AgentAPIHandler.store = SessionStore()
 
     try:
-        server = HTTPServer((host, port), AgentAPIHandler)
+        server = ThreadingHTTPServer((host, port), AgentAPIHandler)
     except OSError as e:
         if "10048" in str(e) or "98" in str(e) or "Address already in use" in str(e):
             logger.error("Port %d is already in use. Use --port to pick another, "
