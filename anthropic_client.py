@@ -16,7 +16,6 @@ Configuration:
 import asyncio
 import json
 import logging
-import os
 import random
 from typing import Any, AsyncIterator, Callable
 
@@ -58,14 +57,12 @@ class AnthropicClient(BaseLLMClient):
         # ── Model — with optional mapping ──────────────────────────────
         self._model = self.config.model
         map_json = ""
-        # Read from settings (which includes env block) at init time
+        # Read from settings env block (cascades through env vars → settings.json)
         try:
             from .settings import get_settings
-            map_json = get_settings().get_env("ANTHROPIC_MODEL_MAP", "")
+            map_json = get_settings()._env_val("ANTHROPIC_MODEL_MAP", "")
         except Exception:
             map_json = ""
-        if not map_json:
-            map_json = os.getenv("ANTHROPIC_MODEL_MAP", "")
         if map_json:
             try:
                 model_map = json.loads(map_json)
@@ -82,8 +79,8 @@ class AnthropicClient(BaseLLMClient):
             "Content-Type": "application/json",
         }
         # Native Anthropic requires this header (default: 2023-06-01).
-        # Proxies may ignore it; override via ANTHROPIC_VERSION env var.
-        self._headers["anthropic-version"] = os.getenv("ANTHROPIC_VERSION", "2023-06-01")
+        # Proxies may ignore it; override via settings env block.
+        self._headers["anthropic-version"] = self._get_anthropic_version()
 
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(300.0, connect=30.0),
@@ -93,6 +90,18 @@ class AnthropicClient(BaseLLMClient):
         # Retry config
         self._max_retries = 3
         self._retry_base_delay = 1.0  # seconds
+
+    @staticmethod
+    def _get_anthropic_version() -> str:
+        """Return anthropic-version header, respecting settings."""
+        try:
+            from .settings import get_settings
+            ver = get_settings()._env_val("ANTHROPIC_VERSION", "")
+            if ver:
+                return ver
+        except Exception:
+            pass
+        return "2023-06-01"
 
     def on_usage(self, callback: Callable[[int, int], None]) -> None:
         self._usage_callback = callback
