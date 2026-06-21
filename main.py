@@ -413,7 +413,7 @@ async def run_interactive_async(config: AppConfig, **kwargs):
                     try:
                         controller.agent.save_session()
                     except Exception:
-                        pass
+                        logger.warning("Failed to save session after agent run", exc_info=True)
             continue
 
         running = await _dispatch_command(cmd, arg, controller.agent, config, ui,
@@ -425,7 +425,7 @@ async def run_interactive_async(config: AppConfig, **kwargs):
         try:
             controller.agent.save_session()
         except Exception:
-            pass
+            logger.warning("Failed to save session on exit", exc_info=True)
     tool_exec.clear_file_cache()
 
     # Clawd: SessionEnd — await final event delivery before loop stops
@@ -578,7 +578,9 @@ def _setup(config, kwargs):
                     setattr(attr, name, io.TextIOWrapper(
                         stream.buffer, encoding="utf-8", errors="replace"))
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Failed to wrap %s with UTF-8 encoding; "
+                        "non-ASCII output may cause UnicodeDecodeError", name)
 
     log_level = logging.DEBUG if kwargs.get("verbose") else logging.WARNING
     logging.basicConfig(
