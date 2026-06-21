@@ -92,7 +92,7 @@ class ServerRoutesMixin:
                 self._json_response({"models": models_data, "current": self.config.llm.model})
                 return
         except Exception:
-            logger.debug("Failed to fetch models from API, using cache", exc_info=True)
+            logger.exception("Failed to fetch models from API, using cache")
         # Fallback: cached model list from settings or env
         from .settings import get_settings
         cached = get_settings().get("env", "ATA_CODER_MODELS_CACHE", default="") or self.config.llm.model

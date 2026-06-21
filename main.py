@@ -93,12 +93,12 @@ def _signal_handler(sig, frame):
     try:
         get_clawd().shutdown()
     except Exception:
-        logger.debug("Clawd shutdown failed during signal handler", exc_info=True)
+        logger.exception("Clawd shutdown failed during signal handler")
     for handler in _cleanup_handlers:
         try:
             handler()
         except Exception:
-            logger.debug("Cleanup handler %s failed", handler, exc_info=True)
+            logger.exception("Cleanup handler %s failed", handler)
     sys.exit(1)
 
 

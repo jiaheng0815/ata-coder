@@ -83,12 +83,12 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
                         body,
                     ]))
                 except Exception:
-                    logger.debug("Failed to send 503 response", exc_info=True)
+                    logger.exception("Failed to send 503 response")
                 finally:
                     try:
                         request.close()
                     except Exception:
-                        logger.debug("Failed to close rejected request socket", exc_info=True)
+                        logger.exception("Failed to close rejected request socket")
                 return
             # Atomic read-modify-write under lock
             self._active_threads += 1
