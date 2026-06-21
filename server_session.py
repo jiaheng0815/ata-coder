@@ -259,8 +259,6 @@ class SessionStore:
     def delete(self, sid: str) -> bool:
         with self._lock:
             agent = self._sessions.pop(sid, None)
-            if agent:
-                self._shutdown_agent(agent)
             meta = self._metadata.pop(sid, None)
             if meta and "token_hash" in meta:
                 th = meta["token_hash"]
@@ -268,4 +266,8 @@ class SessionStore:
                     self._token_sessions[th].discard(sid)
                     if not self._token_sessions[th]:
                         del self._token_sessions[th]
-            return agent is not None
+        # Shut down OUTSIDE the lock — agent.shutdown() may block
+        # on network I/O and cannot hold the session lock.
+        if agent:
+            self._shutdown_agent(agent)
+        return agent is not None

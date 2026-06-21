@@ -649,17 +649,20 @@ class MemoryStore:
 
             # Re-use the scored search
             scored = self._search_scored(user_input)
-        relevant = [m for score, m in scored if score >= min_score][:max_memories]
-        if not relevant:
-            return ""
 
-        # Bump access tracking and persist with debounce
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        now_ts = time.time()
+            relevant = [m for score, m in scored if score >= min_score][:max_memories]
+            if not relevant:
+                return ""
+
+            # Bump access tracking under lock to prevent races with add()/delete()
+            now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            now_ts = time.time()
+            for m in relevant:
+                m.metadata["last_accessed"] = now
+                m.metadata["access_count"] = m.metadata.get("access_count", 0) + 1
+
+        # Persist access metadata outside the lock (disk I/O)
         for m in relevant:
-            m.metadata["last_accessed"] = now
-            m.metadata["access_count"] = m.metadata.get("access_count", 0) + 1
-            # Debounced disk write — skip if we just wrote this memory
             last_write = self._access_write_debounce.get(m.name, 0)
             if now_ts - last_write >= self._ACCESS_DEBOUNCE_S:
                 try:

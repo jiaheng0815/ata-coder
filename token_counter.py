@@ -16,6 +16,7 @@ CJK-aware heuristics or calling tiktoken directly.
 
 import logging
 import re
+import threading
 import time
 from collections import OrderedDict
 from typing import Any
@@ -61,6 +62,7 @@ class TokenCounter:
 
     # Per-model singleton cache (keyed by model name), LRU-bounded
     _instances: "OrderedDict[str, TokenCounter]" = OrderedDict()
+    _instances_lock = threading.Lock()
 
     def __init__(self, model: str = ""):
         self._model = model
@@ -79,17 +81,20 @@ class TokenCounter:
         Different models may use different tokenizers, so we cache per model.
         The instance cache is LRU-bounded to prevent unbounded growth when
         users switch models frequently.
+
+        Thread-safe: protects the class-level OrderedDict with a lock.
         """
         key = model or "__default__"
-        if key not in cls._instances:
-            if len(cls._instances) >= _MAX_MODELS:
-                # Evict least-recently-used model instance
-                cls._instances.popitem(last=False)
-            cls._instances[key] = cls(model)
-        else:
-            # Move to end for LRU tracking
-            cls._instances.move_to_end(key)
-        return cls._instances[key]
+        with cls._instances_lock:
+            if key not in cls._instances:
+                if len(cls._instances) >= _MAX_MODELS:
+                    # Evict least-recently-used model instance
+                    cls._instances.popitem(last=False)
+                cls._instances[key] = cls(model)
+            else:
+                # Move to end for LRU tracking
+                cls._instances.move_to_end(key)
+            return cls._instances[key]
 
     # ── Encoding resolution ───────────────────────────────────────────────
 
