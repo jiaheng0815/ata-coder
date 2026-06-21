@@ -7,14 +7,15 @@
 
 // ── Risk Levels ─────────────────────────────────────────────────────────────
 
-// Use plain `enum` (not `const enum`) — Node.js 24 native TS does NOT compile
-// const enums away; they must exist as runtime objects for value access.
-export enum RiskLevel {
-  SAFE = "SAFE",
-  CAUTION = "CAUTION",
-  DANGER = "DANGER",
-  CRITICAL = "CRITICAL",
-}
+// erasableSyntaxOnly-safe: type alias + const object replaces runtime enum.
+// Consumers can use RiskLevel.SAFE (value) or RiskLevel (type) interchangeably.
+export type RiskLevel = "SAFE" | "CAUTION" | "DANGER" | "CRITICAL";
+export const RiskLevel = {
+  SAFE: "SAFE",
+  CAUTION: "CAUTION",
+  DANGER: "DANGER",
+  CRITICAL: "CRITICAL",
+} as const;
 
 export interface SafetyCheck {
   allowed: boolean;

@@ -11,10 +11,12 @@ import { ATA_HOME } from "./config.ts";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-export const enum ChangeType {
-  WRITE = "WRITE",
-  EDIT = "EDIT",
-}
+// erasableSyntaxOnly-safe: type alias + const object replaces const enum.
+export type ChangeType = "WRITE" | "EDIT";
+export const ChangeType = {
+  WRITE: "WRITE",
+  EDIT: "EDIT",
+} as const;
 
 export interface FileChange {
   id: number;
