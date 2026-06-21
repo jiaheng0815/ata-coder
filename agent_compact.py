@@ -237,11 +237,14 @@ class CompactionMixin:
                 summary_config = copy.deepcopy(self.llm.config)
                 summary_config.model = get_subagent_model()
                 old_sc = sc
+                # Clear cached reference before construction so a failed
+                # LLMClient() doesn't leave a closed client on self.
+                self._summary_llm = None
                 sc = LLMClient(summary_config)
+                self._summary_llm = sc
                 # Close the failed client to avoid connection leak
                 with contextlib.suppress(Exception):
                     await old_sc.close()
-                self._summary_llm = sc
                 resp = await sc.chat([{"role": "user", "content": summary_prompt}], tools=[])
             llm_summary = (resp.get("content") or "").strip()
             if llm_summary:

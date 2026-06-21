@@ -500,15 +500,16 @@ def main():
     if args.local_only:
         args.host = "127.0.0.1"
 
+    server = create_server(config, args.host, args.port)
+
     # Security: warn if binding to all interfaces without authentication
+    # (checked AFTER create_server() because it may auto-generate a token)
     if args.host == "0.0.0.0" and not os.environ.get("ATA_CODER_API_TOKEN"):
         logger.warning(
             "⚠️  Binding to 0.0.0.0 WITHOUT an API token — "
             "anyone on the network can access the agent. "
             "Set ATA_CODER_API_TOKEN env var or use --local-only."
         )
-
-    server = create_server(config, args.host, args.port)
 
     # Detect LAN IP for mobile access
     lan_ip = _detect_lan_ip() if args.host == "0.0.0.0" else None

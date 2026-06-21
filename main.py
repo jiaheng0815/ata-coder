@@ -88,17 +88,16 @@ def register_cleanup(handler) -> None:
 
 
 def _signal_handler(sig, frame):
+    # Signal handlers must be MINIMAL: no I/O, no locks, no allocations.
+    # Network calls (e.g. Clawd shutdown) can deadlock if the signal
+    # interrupted a thread holding a lock the network stack needs.
+    # The Clawd client is shut down in agent.shutdown() during normal cleanup.
     print("\n[Interrupted]")
-    # Clawd: notify desktop pet before exit
-    try:
-        get_clawd().shutdown()
-    except Exception:
-        logger.exception("Clawd shutdown failed during signal handler")
     for handler in _cleanup_handlers:
         try:
             handler()
         except Exception:
-            logger.exception("Cleanup handler %s failed", handler)
+            pass  # cannot log from signal context
     sys.exit(1)
 
 

@@ -78,9 +78,9 @@ def is_clawd_running() -> bool:
             f"http://127.0.0.1:{port}/health",
             method="GET",
         )
-        resp = request.urlopen(req, timeout=0.3)
-        resp.read()
-        return resp.status == 200
+        with request.urlopen(req, timeout=0.3) as resp:
+            resp.read()
+            return resp.status == 200
     except Exception:
         return False
 
@@ -412,8 +412,8 @@ class ClawdIntegration:
                 },
                 method="POST",
             )
-            resp = request.urlopen(req, timeout=PERMISSION_TIMEOUT_S)
-            raw = resp.read().decode("utf-8")
+            with request.urlopen(req, timeout=PERMISSION_TIMEOUT_S) as resp:
+                raw = resp.read().decode("utf-8")
             data = json.loads(raw)
 
             # Clawd response format:
@@ -472,7 +472,8 @@ class ClawdIntegration:
                 },
                 method="POST",
             )
-            request.urlopen(req, timeout=timeout)
+            with request.urlopen(req, timeout=timeout) as resp:
+                resp.read()  # consume body to release connection
             return True
         except (urllib_error.URLError, OSError, ValueError):
             return False
