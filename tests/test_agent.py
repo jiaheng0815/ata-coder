@@ -153,8 +153,9 @@ class TestCoderAgentInit:
     def test_no_callback_no_crash(self):
         config = AppConfig(agent=AgentConfig(workspace_dir="."))
         agent = CoderAgent(config=config)
-        # Should not raise
+        # Should not raise when no on_event callback is registered
         agent._emit(ThinkingEvent())
+        # Test passes if no exception propagates
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -203,7 +204,8 @@ class TestCoderAgentRouting:
             stream=False,
             explicit_model=config.llm.model,
         ))
-        assert agent._state.tool_call_count >= 0
+        # FakeLLMClient returns text without tool calls, so count stays 0
+        assert agent._state.tool_call_count == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -244,8 +246,8 @@ class TestCoderAgentSubsystems:
         agent = CoderAgent(config=config)
         # skills/memory/mcp/templates/permissions all default to None
         # This is by design — they're enabled only when explicitly set up
-        assert agent.subsys.has_skills is False or True  # trivially True
-        assert agent.subsys.has_memory is False or True
+        assert not agent.subsys.has_skills
+        assert not agent.subsys.has_memory
 
     def test_subsystems_can_be_disabled(self):
         """Explicit None subsystems means feature is disabled."""
