@@ -138,37 +138,50 @@ export class AgentBridge implements Disposable {
       ...opts,
     };
 
-    // Use a promise-based queue so events can be yielded as they arrive
-    // without buffering everything into an array first.
-    const queue: Array<{ resolve: (v: IteratorResult<StreamEvent, string>) => void }> = [];
     const events: StreamEvent[] = [];
-    let done = false;
-    let finalResult = "";
+    let finished = false;
+    let finalText = "";
+
+    // Notify the generator loop whenever a new event arrives OR the request completes.
+    let notifyFn: (() => void) | null = null;
+    const notify = () => {
+      if (notifyFn) { notifyFn(); notifyFn = null; }
+    };
 
     const emitter = new EventEmitter();
     emitter.on("event", (evt: StreamEvent) => {
       events.push(evt);
-      // Wake up the generator if it's waiting for events
-      const waiter = queue.shift();
-      if (waiter) waiter.resolve({ value: events.shift()!, done: false });
+      notify();
     });
 
-    const finalPromise = new Promise<AgentResponse>((resolve, reject) => {
-      this.#send(req, resolve, reject, 600_000, emitter);
-    });
+    // Fire-and-forget: #send resolves/rejects on final response.
+    // We use notify() to wake the generator loop for both events and completion.
+    this.#send(req,
+      (result: AgentResponse) => {
+        finished = true;
+        finalText = result.text ?? result.error ?? "";
+        notify();
+      },
+      (err: Error) => {
+        finished = true;
+        finalText = err.message;
+        notify();
+      },
+      600_000,
+      emitter,
+    );
 
-    // Race: yield events as they arrive, or finish when the agent completes
-    const result = await finalPromise;
+    // Yield events as they arrive — don't wait for the agent to finish first.
+    while (!finished || events.length > 0) {
+      if (events.length > 0) {
+        yield events.shift()!;
+      } else if (!finished) {
+        await new Promise<void>((resolve) => { notifyFn = resolve; });
+      }
+    }
+
     emitter.removeAllListeners("event");
-
-    // Drain any remaining buffered events
-    for (const evt of events) yield evt;
-
-    // Wake any pending waiter with the done signal
-    const waiter = queue.shift();
-    if (waiter) waiter.resolve({ value: result.text ?? result.error ?? "", done: true });
-
-    return result.text ?? result.error ?? "";
+    return finalText;
   }
 
   /** Cancel a running task */

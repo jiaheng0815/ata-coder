@@ -784,16 +784,66 @@ def ipc_cmd(ctx, workspace):
                 skill = req.get("skill")
                 model = req.get("model", "")
                 reset = req.get("resetContext", True)
+
+                # Forward agent events as stream JSON lines when streaming.
+                # The TS bridge expects {id, status:"stream", event:{type, ...}} on stdout.
+                if stream:
+                    from .core.events import (
+                        TextDeltaEvent, ToolCallEvent, ToolResultEvent,
+                        ToolStreamEvent, ThinkingEvent, ErrorEvent,
+                        CompleteEvent, ReasoningEvent,
+                    )
+
+                    def _mk_stream_event(evt):
+                        """Convert Python AgentEvent → TS StreamEvent dict (or None)."""
+                        if isinstance(evt, TextDeltaEvent):
+                            return {"type": "text_delta", "content": evt.text}
+                        if isinstance(evt, ToolCallEvent):
+                            return {"type": "tool_call", "tool_name": evt.tool_name,
+                                    "arguments": evt.arguments}
+                        if isinstance(evt, ToolResultEvent):
+                            out = str(evt.result.output or "")[:4096]
+                            return {"type": "tool_result", "tool_name": evt.tool_name,
+                                    "success": evt.result.success, "output": out}
+                        if isinstance(evt, ToolStreamEvent):
+                            return {"type": "tool_stream", "tool_name": evt.tool_name,
+                                    "chunk": evt.chunk}
+                        if isinstance(evt, (ThinkingEvent, ReasoningEvent)):
+                            content = getattr(evt, "text", "")
+                            return {"type": "thinking", "content": content}
+                        if isinstance(evt, ErrorEvent):
+                            return {"type": "error", "message": evt.error}
+                        if isinstance(evt, CompleteEvent):
+                            return {"type": "complete", "text": "",
+                                    "usage": {"promptTokens": 0, "completionTokens": 0,
+                                              "totalTokens": evt.estimated_tokens}}
+                        return None
+
+                    def _ipc_stream_cb(evt):
+                        se = _mk_stream_event(evt)
+                        if se is None:
+                            return
+                        _sys.stdout.write(_json.dumps(
+                            {"id": rid, "status": "stream", "event": se},
+                            ensure_ascii=False,
+                        ) + "\n")
+                        _sys.stdout.flush()
+
+                    agent.on_event(_ipc_stream_cb)
+
                 try:
                     text = await agent.run(task, stream=stream, skill_name=skill,
                                            explicit_model=model, reset_context=reset)
                     _sys.stdout.write(_json.dumps({
                         "id": rid, "status": "done", "text": text,
-                    }) + "\n")
+                    }, ensure_ascii=False) + "\n")
                 except Exception as e:
                     _sys.stdout.write(_json.dumps({
                         "id": rid, "status": "error", "error": str(e),
-                    }) + "\n")
+                    }, ensure_ascii=False) + "\n")
+                finally:
+                    if stream:
+                        agent.on_event(None)  # unregister callback
                 _sys.stdout.flush()
             else:
                 _sys.stdout.write(_json.dumps({
