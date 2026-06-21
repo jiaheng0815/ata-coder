@@ -44,20 +44,23 @@ def run_setup_wizard() -> None:
     try:
         if os.name == "nt":
             import msvcrt
-            api_key_parts: list[str] = []
+            raw_bytes: bytearray = bytearray()
             while True:
                 ch = msvcrt.getch()
                 if ch in (b"\r", b"\n"):
                     break
                 if ch == b"\x08":
-                    if api_key_parts:
-                        api_key_parts.pop()
+                    if raw_bytes:
+                        raw_bytes.pop()
                 elif ch == b"\x03":
                     print("\n  配置取消。")
                     sys.exit(0)
                 else:
-                    api_key_parts.append(ch.decode("utf-8", errors="replace"))
-            api_key = "".join(api_key_parts)
+                    raw_bytes.extend(ch)
+            # Decode the accumulated bytes as a complete UTF-8 sequence.
+            # Per-byte decoding (ch.decode()) corrupts multi-byte characters
+            # like CJK or accented Latin.
+            api_key = raw_bytes.decode("utf-8", errors="replace")
         else:
             import tty
             import termios

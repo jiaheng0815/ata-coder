@@ -404,7 +404,11 @@ class MemoryStore:
         with self._lock:
             self._idf_cache = None
             for memory in memories:
-                Memory.validate_name(memory.name)
+                try:
+                    Memory.validate_name(memory.name)
+                except ValueError as e:
+                    logger.warning("Skipping invalid memory '%s': %s", memory.name, e)
+                    continue
                 file_path = self.memory_dir / memory.file_path
                 try:
                     self._write_file_atomically(file_path, memory.to_frontmatter())
