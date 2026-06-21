@@ -54,9 +54,30 @@ function parseFrontmatter(raw: string): { data: Record<string, string>; body: st
   if (!match) return null;
 
   const data: Record<string, string> = {};
+  let parentKey = "";
+
   for (const line of match[1].split("\n")) {
-    const kv = line.match(/^(\w[\w-]*):\s*(.*)$/);
-    if (kv) data[kv[1]] = kv[2].trim();
+    if (line.trim() === "") continue;
+
+    // Top-level key (no leading whitespace)
+    const topKv = line.match(/^(\w[\w-]*):\s*(.*)$/);
+    if (topKv) {
+      parentKey = "";
+      const val = topKv[2].trim();
+      if (val) {
+        data[topKv[1]] = val;
+      } else {
+        // Key with no value: treat as a nested section header
+        parentKey = topKv[1];
+      }
+      continue;
+    }
+
+    // Indented key under a parent section (e.g., "  type: reference")
+    const indentKv = line.match(/^\s+(\w[\w-]*):\s*(.*)$/);
+    if (indentKv && parentKey) {
+      data[`${parentKey}.${indentKv[1]}`] = indentKv[2].trim();
+    }
   }
   return { data, body: match[2].trim() };
 }

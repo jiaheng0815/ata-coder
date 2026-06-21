@@ -156,7 +156,10 @@ export class ChangeTracker implements Disposable {
   #backup(filePath: string): void {
     if (!existsSync(filePath)) return;
     try {
-      const backupName = `${filePath.replace(/[/\\:]/g, "_")}.${Date.now()}.bak`;
+      // Date.now() has ms precision — append a short random suffix to avoid
+      // collisions when two writes happen in the same millisecond.
+      const suffix = Math.random().toString(36).slice(2, 6);
+      const backupName = `${filePath.replace(/[/\\:]/g, "_")}.${Date.now()}_${suffix}.bak`;
       const backupPath = join(this.#backupDir, backupName);
       copyFileSync(filePath, backupPath);
       this.#backups.set(filePath, backupPath);
