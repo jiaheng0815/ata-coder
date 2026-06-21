@@ -354,5 +354,5 @@ class ToolExecutionMixin:
         except FileNotFoundError:
             return ""
         except Exception:
-            logger.debug("Failed to read %s for change tracking", file_path, exc_info=True)
+            logger.exception("Failed to read %s for change tracking", file_path)
         return ""

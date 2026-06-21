@@ -439,7 +439,7 @@ class ClawdIntegration:
             logger.debug("Clawd permission error: %s", e)
             return None
         except Exception:
-            logger.debug("Clawd permission failed", exc_info=True)
+            logger.exception("Clawd permission failed")
             return None
 
     # ── Internal ───────────────────────────────────────────────────────────
@@ -477,7 +477,7 @@ class ClawdIntegration:
         except (urllib_error.URLError, OSError, ValueError):
             return False
         except Exception:
-            logger.debug("Clawd post failed", exc_info=True)
+            logger.exception("Clawd post failed")
             return False
 
     async def _post_async(self, data: dict) -> None:

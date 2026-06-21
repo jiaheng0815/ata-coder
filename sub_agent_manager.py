@@ -142,7 +142,7 @@ class SubAgentManager:
             try:
                 results.append(await self.collect(aid, timeout))
             except Exception:
-                logger.debug("Failed to collect sub-agent %s", aid, exc_info=True)
+                logger.exception("Failed to collect sub-agent %s", aid)
                 results.append(SubAgentResult(
                     agent_id=aid, result=None,
                     error=f"Collection failed for {aid}", success=False,

@@ -144,7 +144,7 @@ class ChangeTracker:
                     old_content = f.read()
                 self._backup(file_path)
             except Exception:
-                logger.debug("Failed to read/backup existing file %s", file_path, exc_info=True)
+                logger.exception("Failed to read/backup existing file %s", file_path)
 
         change = FileChange(
             id=self._next_id,

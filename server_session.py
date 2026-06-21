@@ -45,7 +45,7 @@ class SessionStore:
             try:
                 asyncio.run(agent.shutdown())
             except Exception:
-                logger.debug("Agent shutdown via asyncio.run() failed", exc_info=True)
+                logger.exception("Agent shutdown via asyncio.run() failed")
             return
         # Event loop is running — schedule on it via thread-safe mechanism
         try:
