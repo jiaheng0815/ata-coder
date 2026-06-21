@@ -199,6 +199,21 @@ The token value is set once by the user:
 - **Windows**: ``[Environment]::SetEnvironmentVariable('PYPI_TOKEN', 'pypi-...', 'User')``
 - **macOS / Linux**: add ``export PYPI_TOKEN=pypi-...`` to ``~/.zshrc`` or ``~/.bashrc``
 
+### 🔄 代码落地后强制流程（Commit → Push → 写入 CLAUDE.md）
+
+**每次完成代码变更（新功能、修复、重构、文档更新）后，必须严格执行以下三步，缺一不可：**
+
+1. **Commit** — 按本文件第四条的三段式提交格式，写好 commit message 后 `git commit`
+2. **Push** — `git push origin master`，将变更推送到 GitHub
+3. **写入 CLAUDE.md** — 如果本次变更涉及新的模块、新的设计模式、新的约定、或踩了值得记录的坑，**必须追加到本文件（CLAUDE.md）相应章节**。禁止只写代码不留文档。具体更新位置：
+   - 新增文件 → 更新 `### Package layout` 文件树
+   - 新增设计模式/gotcha → 追加到 `### Key design patterns & gotchas` 列表
+   - 新增规则/约定 → 追加到 `## 一、核心开发铁律` 或相关章节
+   - 新增环境变量 → 追加到 `### Environment variables` 列表
+   - 新增模块职责描述 → 追加到 `### Core modules` 表格
+
+**为什么这条规则重要**：CLAUDE.md 是本项目 AI Agent 的"记忆中枢"。不写进去的约定 = 下一次会话不会遵守的约定。代码推上去了但 CLAUDE.md 没更新 = 下一次 AI 助手会写出违反新约定的代码。这是本项目 dogfooding 模式的核心闭环。
+
 ## Commands
 
 ```bash
@@ -329,6 +344,7 @@ ata_coder/
 ├── extensions/              # Plugin directory
 ├── examples/                # Usage examples
 ├── tests/                   # pytest suite (499 tests)
+├── CONTRIBUTING.md          # 正式参与手册（架构概览、铁律、提交格式、CR清单、开发指南）
 └── README.md
 ```
 
