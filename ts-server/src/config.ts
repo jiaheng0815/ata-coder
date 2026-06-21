@@ -22,15 +22,15 @@ const SESSIONS_DIR = join(ATA_HOME, "sessions");
 // ── Defaults ────────────────────────────────────────────────────────────────
 
 const DEFAULTS = {
-  model: "deepseek-v4-pro",
-  opusModel: "deepseek-v4-pro",
-  sonnetModel: "deepseek-v4-pro",
-  haikuModel: "deepseek-v4-flash",
-  subagentModel: "deepseek-v4-flash",
-  maxOutputTokens: 131072,
-  effortLevel: "max",
+  model: "gpt-4o",
+  opusModel: "gpt-4o",
+  sonnetModel: "gpt-4o",
+  haikuModel: "gpt-4o-mini",
+  subagentModel: "gpt-4o-mini",
+  maxOutputTokens: 16384,
+  effortLevel: "medium",
   temperature: 0.1,
-  baseUrl: "https://api.deepseek.com",
+  baseUrl: "https://api.openai.com/v1",
   useAnthropic: false,
   maxSubAgents: 5,
   searchBackend: "bing",

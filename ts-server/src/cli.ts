@@ -55,8 +55,8 @@ async function firstRunWizard(force = false): Promise<void> {
   console.log("\n  Welcome to ATA Coder! First-run setup.\n");
 
   const apiKey = await ask("  API Key: ");
-  const baseUrl = await ask("  Base URL [https://api.deepseek.com]: ");
-  const model = await ask("  Default Model [deepseek-v4-pro]: ");
+  const baseUrl = await ask("  Base URL [https://api.openai.com/v1]: ");
+  const model = await ask("  Default Model [gpt-4o]: ");
 
   writeDefaultSettings(apiKey || "", baseUrl || undefined);
   console.log(`\n  ✅ Configuration saved to ~/.ata_coder/settings.json\n`);

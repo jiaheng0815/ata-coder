@@ -270,11 +270,11 @@ def _settings_api_key() -> str:
 
 
 def _settings_base_url() -> str:
-    return _from_settings("api_base_url", "https://api.deepseek.com")
+    return _from_settings("api_base_url", "https://api.openai.com/v1")
 
 
 def _settings_default_model() -> str:
-    return _from_settings("default_model", "deepseek-v4-pro")
+    return _from_settings("default_model", "gpt-4o")
 
 
 def _settings_max_output_tokens() -> int:
