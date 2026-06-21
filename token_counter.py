@@ -5,7 +5,7 @@ Provides a single authoritative utility for estimating token counts
 across all models, clients, and compaction paths.  Features:
 
 - Model-aware encoding (cl100k_base for GPT-family, CJK fallback for others)
-- LRU per-message caching (identity-keyed, O(1) lookup, zero hashing)
+- LRU per-message caching (content-hash-keyed, stable across GC cycles)
 - Batch counting with single tiktoken encode pass + fast cached-path
 - Incremental `count_one()` for O(1) running-total tracking
 - Singleton-per-model with bounded LRU eviction (max 16 models)
@@ -35,9 +35,9 @@ _CJK_RATIO_DEN = 3
 _LATIN_RATIO_NUM = 1
 _LATIN_RATIO_DEN = 4
 
-# Models known to use cl100k_base (OpenAI GPT-4+, text-embedding-ada-002, etc.)
-_CL100K_PREFIXES = ("gpt-4", "gpt-3.5", "text-embedding-", "o1", "o3", "o4")
-_CL100K_CONTAINS = ("claude",)
+# Models using o200k_base (GPT-4o family, o1/o3/o4 reasoning models)
+_O200K_PREFIXES = ("gpt-4o", "gpt-4.1", "o1", "o3", "o4")
+# cl100k_base fallback covers gpt-4, gpt-3.5, text-embedding, and non-OpenAI models
 
 # Cache bound: max messages tracked per TokenCounter instance.
 _MAX_CACHE_SIZE = 200
@@ -64,7 +64,8 @@ class TokenCounter:
 
     def __init__(self, model: str = ""):
         self._model = model
-        # LRU cache: id(msg) -> (timestamp, token_count)
+        # LRU cache: hash(str(msg)) -> (timestamp, token_count)
+        # Content-hash key avoids id()-reuse bugs after GC.
         self._cache: OrderedDict[int, tuple[float, int]] = OrderedDict()
         self._enc = None   # lazy-loaded tiktoken encoding
         self._has_tiktoken: bool | None = None
@@ -93,7 +94,12 @@ class TokenCounter:
     # ── Encoding resolution ───────────────────────────────────────────────
 
     def _get_encoding(self):
-        """Return a tiktoken Encoding for the current model, or None."""
+        """Return a tiktoken Encoding for the current model, or None.
+
+        Uses o200k_base for GPT-4o/4.1/o1/o3/o4 family, cl100k_base as fallback.
+        Non-OpenAI models (Claude, DeepSeek, etc.) use cl100k_base — a reasonable
+        approximation since tiktoken only ships OpenAI encodings.
+        """
         if self._has_tiktoken is False:
             return None
         if self._enc is not None:
@@ -106,19 +112,24 @@ class TokenCounter:
 
         self._has_tiktoken = True
         model_lower = self._model.lower()
-        if any(model_lower.startswith(p) for p in _CL100K_PREFIXES):
-            self._enc = tiktoken.get_encoding("cl100k_base")
-        elif any(c in model_lower for c in _CL100K_CONTAINS):
-            self._enc = tiktoken.get_encoding("cl100k_base")
-        else:
+
+        # o200k_base: GPT-4o family, o1/o3/o4 reasoning models
+        if any(model_lower.startswith(p) for p in _O200K_PREFIXES):
             try:
-                self._enc = tiktoken.get_encoding("cl100k_base")
+                self._enc = tiktoken.get_encoding("o200k_base")
+                return self._enc
             except Exception:
-                self._has_tiktoken = False
-                return None
+                pass  # fall through to cl100k_base fallback
+
+        self._enc = tiktoken.get_encoding("cl100k_base")
         return self._enc
 
     # ── Public API ────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _msg_key(msg: Message) -> int:
+        """Stable content-based cache key (survives GC id reuse)."""
+        return hash(str(msg))
 
     def count_one(self, msg: Message) -> int:
         """Count tokens for a single message. O(1) cache-hit path.
@@ -126,7 +137,7 @@ class TokenCounter:
         This is the hot path for incremental token tracking — used by
         ContextManager.append() to maintain the running total.
         """
-        key = id(msg)
+        key = self._msg_key(msg)
         if key in self._cache:
             self._cache.move_to_end(key)
             return self._cache[key][1]
@@ -148,10 +159,10 @@ class TokenCounter:
         without any encoding. Otherwise falls through to uncached encoding.
         """
         # ── Fast path: all cached ─────────────────────────────────────────
-        if messages and all(id(m) in self._cache for m in messages):
+        if messages and all(self._msg_key(m) in self._cache for m in messages):
             counts: list[int] = []
             for msg in messages:
-                key = id(msg)
+                key = self._msg_key(msg)
                 self._cache.move_to_end(key)
                 counts.append(self._cache[key][1])
             return counts
@@ -162,7 +173,7 @@ class TokenCounter:
         uncached: list[tuple[int, Message]] = []
 
         for i, msg in enumerate(messages):
-            key = id(msg)
+            key = self._msg_key(msg)
             if key in self._cache:
                 self._cache.move_to_end(key)
                 counts.append(self._cache[key][1])
@@ -175,7 +186,7 @@ class TokenCounter:
             for idx, msg in uncached:
                 ct = self._count_one(msg, enc)
                 counts[idx] = ct
-                key = id(msg)
+                key = self._msg_key(msg)
                 self._cache[key] = (now, ct)
 
         self._evict_lru()
