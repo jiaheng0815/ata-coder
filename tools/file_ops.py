@@ -373,6 +373,7 @@ class FileOpsMixin:
 
             def on_leave(self, original_node: _cst_lib.CSTNode, updated_node: _cst_lib.CSTNode) -> _cst_lib.CSTNode:
                 if original_node.deep_equals(self.old_node) and self.found:
+                    self.found = False  # prevent replacement of subsequent matches
                     return self.new_node
                 return updated_node
 

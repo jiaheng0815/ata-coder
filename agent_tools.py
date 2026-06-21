@@ -66,8 +66,8 @@ class ToolExecutionMixin:
                         self._emit(ErrorEvent(msg))
                         return ToolResult(success=False, output="", error=msg)
 
-        # ── Permission check (fallback when fool_proof is disabled) ─────
-        elif self.permissions:
+        # ── Permission check (always consulted, even when fool_proof said PROCEED) ──
+        if self.permissions:
             from .permissions import tool_category
             category = tool_category(tool_name)
             if category != "read":

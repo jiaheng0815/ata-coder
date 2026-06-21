@@ -420,7 +420,9 @@ class WebToolsMixin:
             if resp.status_code in (301, 302, 303, 307, 308):
                 url = resp.headers.get("location", "")
                 if not url:
-                    break
+                    raise ValueError(
+                        f"HTTP {resp.status_code} redirect without Location header"
+                    )
                 # Resolve relative redirects
                 if not url.startswith(("http://", "https://")):
                     from urllib.parse import urljoin
