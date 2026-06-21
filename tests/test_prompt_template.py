@@ -202,9 +202,18 @@ Tools:
 class TestTemplateManager:
     """TemplateManager file loading and caching."""
 
+    def setup_method(self):
+        import tempfile
+        self._tmp_dir = tempfile.mkdtemp(prefix="ata_test_prompts_")
+
+    def teardown_method(self):
+        import shutil, os
+        if os.path.exists(self._tmp_dir):
+            shutil.rmtree(self._tmp_dir, ignore_errors=True)
+
     def test_register_inline_template(self):
         """register() should add an inline template."""
-        manager = TemplateManager(prompts_dir="/tmp/nonexistent_prompts")
+        manager = TemplateManager(prompts_dir=self._tmp_dir)
         manager.register("greeting", "Hello, {{ name }}!")
         template = manager.get("greeting")
         assert template is not None
@@ -213,22 +222,22 @@ class TestTemplateManager:
 
     def test_get_nonexistent(self):
         """get() should return None for missing templates."""
-        manager = TemplateManager(prompts_dir="/tmp/nonexistent_prompts")
+        manager = TemplateManager(prompts_dir=self._tmp_dir)
         assert manager.get("nonexistent") is None
 
     def test_render_nonexistent(self):
         """render() should return None for missing templates."""
-        manager = TemplateManager(prompts_dir="/tmp/nonexistent_prompts")
+        manager = TemplateManager(prompts_dir=self._tmp_dir)
         assert manager.render("nonexistent") is None
 
     def test_list_templates_empty(self):
         """list_templates() should return empty list for empty dir."""
-        manager = TemplateManager(prompts_dir="/tmp/nonexistent_prompts")
+        manager = TemplateManager(prompts_dir=self._tmp_dir)
         assert manager.list_templates() == []
 
     def test_list_templates_with_registered(self):
         """list_templates() should include registered templates."""
-        manager = TemplateManager(prompts_dir="/tmp/nonexistent_prompts")
+        manager = TemplateManager(prompts_dir=self._tmp_dir)
         manager.register("test", "content")
         assert "test" in manager.list_templates()
 
