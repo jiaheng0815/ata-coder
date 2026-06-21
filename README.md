@@ -1,12 +1,25 @@
 # ATA Coder
 
-**CLI AI coding assistant — OpenAI & Anthropic APIs, async, streaming, built-in HTTP server.**
+<p align="center">
+  <strong>CLI AI Coding Assistant</strong> — OpenAI & Anthropic APIs, async streaming, built-in HTTP server.
+  <br>
+  Python 3.10+ · MIT License · <a href="#contributing">Contributions Welcome</a>
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/ata-coder/"><img src="https://img.shields.io/pypi/v/ata-coder?color=blue" alt="PyPI"></a>
+  <a href="https://pypi.org/project/ata-coder/"><img src="https://img.shields.io/pypi/pyversions/ata-coder" alt="Python"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/pypi/l/ata-coder" alt="License"></a>
+  <a href="https://github.com/jiaheng0815/ata-coder"><img src="https://img.shields.io/github/stars/jiaheng0815/ata-coder?style=social" alt="Stars"></a>
+</p>
 
 ---
 
-## Overview
+## What is ATA Coder?
 
-ATA Coder is a terminal-based AI coding assistant. Describe what you want in plain language — the AI reads your code, suggests edits, runs shell commands, and searches the web. Every destructive action asks for confirmation first.
+ATA Coder is a terminal-native AI coding assistant. Describe what you want in plain language — the AI reads your code, proposes edits, runs shell commands, and searches the web. Every destructive action asks for confirmation.
+
+Think of it as a senior engineer sitting next to you — one who reads the whole codebase, never gets tired, and tells you *before* running `rm -rf`.
 
 ```bash
 pip install ata-coder
@@ -20,11 +33,11 @@ Requires Python 3.10+. That's the only runtime dependency.
 ata                              # Interactive REPL
 ata run "Fix the timeout bug"    # Single-shot task
 ata server --port 8080           # HTTP API + SSE streaming
-ata --skill debugger             # With a specific skill
+ata --skill debugger             # Activate a specific skill
 ata --resume <session-id>        # Resume a saved session
 ```
 
-First run walks you through API key and model setup. Config saved to `~/.ata_coder/settings.json`.
+First run walks you through API key and model setup. Config is saved to `~/.ata_coder/settings.json`.
 
 ### What a session looks like
 
@@ -42,8 +55,8 @@ async def fetch(url, timeout=5):
         return await c.get(url, timeout=timeout)
 ```
 
-[AI reads the file, identifies that httpx.Timeout has separate connect/read/write
- phases, suggests a fix →]
+[AI reads the file, identifies httpx.Timeout has separate connect/read/write
+ phases, proposes a fix →]
 
 --- a/api.py
 +++ b/api.py
@@ -58,29 +71,78 @@ async def fetch(url, timeout=5):
   ✓ Edited api.py
 ```
 
-## Key Features
+## Features
+
+### Core Engine
 
 | Feature | Description |
 |---------|-------------|
-| **Async agent** | Single-threaded asyncio event loop. Streaming LLM responses. |
-| **File tools** | `read_file`, `write_file`, `edit_file` with colorized diff preview. |
-| **Shell execution** | `run_shell` — output capped at 500KB, timeout-protected. |
-| **Code search** | `grep` (regex) and `glob` (file patterns) — dedicated tools, not shell hacks. |
-| **Web search** | `web_search` (DuckDuckGo) and `web_fetch` (URL text extraction). No API key needed. |
-| **Sub-agents** | Parallel isolated agents for complex multi-step tasks. Semaphore-bounded pool. |
-| **Skill system** | Folder-based skills with auto-detection. Single-skill activation for clean prompts. |
-| **MCP support** | Model Context Protocol — stdio and HTTP/SSE transport. |
-| **Vision** | `analyze_image` — auto-falls back to main API config. |
-| **Session persistence** | Save / resume / export conversation history. |
-| **Safety pipeline** | Pattern-based guard → fool-proof check → interactive permissions → OS privilege elevation. |
-| **Change tracking** | Undo/redo file changes with session-level backups. |
-| **Configuration** | Single `settings.json` file. No env var reading in code — all config flows through settings. |
-| **HTTP API server** | SSE streaming, persistent shell sessions, multi-session management. |
-| **TypeScript companion** | Node.js 24 native TS — CLI, HTTP, MCP bridge, shell manager, safety guard, session/memory store, git, project detection. (Optional — Python core works standalone.) |
-| **Web GUI** | SPA with SSE streaming, markdown rendering, sidebar, command popup. |
-| **Diff preview** | Colorized unified diff in terminal before every file edit. |
-| **Token management** | O(1) token tracking, auto-compaction with LLM summarization, force-truncate fallback. |
-| **Project auto-detection** | Reads CLAUDE.md, detects language/framework/build-system/test-framework, samples code style, shows recent git activity. |
+| **Async agent** | Single-threaded asyncio event loop — no threads, no race conditions |
+| **Streaming** | Real-time LLM output + live tool output streaming for shell/search/fetch |
+| **Multi-provider** | OpenAI-compatible + Anthropic Messages API via unified client interface |
+| **Smart routing** | Keyword + length task classification — routes simple queries to fast models, complex tasks to capable ones, with zero extra API calls |
+| **Context compaction** | O(1) token tracking with LLM summarization and force-truncate fallback |
+| **Vision** | `analyze_image` tool — auto-resolves vision model/api-key/base-url with full fallback chain |
+
+### Developer Tools (14)
+
+| Tool | Description |
+|------|-------------|
+| `read_file` / `write_file` / `edit_file` | File I/O with colorized unified-diff preview before every write |
+| `run_shell` | Timeout-protected, output capped at 500KB, real-time streaming |
+| `grep` / `glob` | Regex content search and file pattern matching — dedicated tools, not shell hacks |
+| `web_search` / `web_fetch` | DuckDuckGo search + URL text extraction (no API key needed) |
+| `spawn_subagent` / `collect_subagent` | Parallel isolated sub-agents for complex multi-step tasks |
+| `mcp_search` | Model Context Protocol — stdio + HTTP/SSE transport |
+| `analyze_image` | Vision analysis with automatic config fallback |
+| `rename_symbol` | AST-based identifier renaming (libcst) |
+
+### Safety Pipeline
+
+```
+Pattern Guard → Fool-Proof Check → Interactive Permissions → OS Privilege Elevation
+```
+
+Every destructive action flows through all four layers before execution. Change tracking backs up every file edit — undo/redo with session-level history.
+
+### HTTP API Server
+
+```bash
+ata server --port 8080
+```
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /chat` | Non-streaming chat |
+| `POST /chat/stream` | SSE streaming with `tool_stream` events |
+| `GET /health` | Health check |
+| `GET /tools` | List available tools |
+| `GET /skills` | List available skills |
+| `GET /models` | List configured models |
+| `POST /api/shell` | Interactive persistent shell session |
+| `GET /sessions` | List active sessions |
+
+```bash
+# Streaming chat
+curl -N -X POST http://localhost:8080/chat/stream \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Explain async/await"}'
+
+# Non-streaming with skill
+curl -X POST http://localhost:8080/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Write hello world", "skill": "general-coder"}'
+```
+
+### Skills & Extensions
+
+Skills live in folder-based manifests (`SKILL.md`) with auto-detection and single-skill activation. Extensions plug into a pub/sub hook system with lifecycle management.
+
+Built-in skills ship in `skills/`. Drop your own into `~/.ata_coder/skills/` — they're auto-discovered.
+
+### TypeScript Companion (optional)
+
+A Node.js 24 native TypeScript server lives in `ts-server/`, handling HTTP/SSE, shell management, MCP bridging, safety guarding, session persistence, git integration, and project detection. Communicates with the Python core via JSON-RPC subprocess IPC. The Python core works standalone — the TS companion adds a hardened outer layer.
 
 ## Architecture
 
@@ -105,63 +167,7 @@ asyncio Event Loop (single-threaded)
       HTTPConnection → httpx.AsyncClient
 ```
 
-The Python core (`agent.py`, LLM clients, tool executor, skills) handles AI/LLM logic. The TypeScript companion (`ts-server/`, Node.js ≥ 24) handles HTTP/SSE/shell/MCP/safety/sessions — communicates via JSON-RPC subprocess IPC.
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `/help` | Show help |
-| `/skills` | List available skills |
-| `/skill <name>` | Switch active skill |
-| `/review` | AI code review of git diff |
-| `/fix [severity]` | Auto-fix review issues |
-| `/undo [n]` | Undo file changes |
-| `/changes` | List tracked changes |
-| `/save` | Save current session |
-| `/resume <id>` | Resume saved session |
-| `/sessions` | List / search session history |
-| `/compact` | Compact conversation context |
-| `/context` | Show token usage + cost |
-| `/model <name>` | Switch model at runtime |
-| `/config` | Show current configuration |
-| `/vision <img> [prompt]` | Analyze image |
-| `/think` | Toggle thinking mode |
-| `/permissions` | Show permission rules |
-| `/git <sub>` | Git operations |
-| `/plan <task>` | Task planning |
-| `/remember` / `/recall` | Memory management |
-| `/mcp search <q>` | Search MCP tools |
-
-## API Server
-
-```bash
-ata server --port 8080
-```
-
-| Endpoint | Description |
-|----------|-------------|
-| `POST /chat` | Non-streaming chat |
-| `POST /chat/stream` | SSE streaming chat |
-| `GET /health` | Health check |
-| `GET /tools` | List tools |
-| `GET /skills` | List skills |
-| `GET /models` | List available models |
-| `GET /sessions` | List sessions |
-| `DELETE /sessions/<id>` | Delete session |
-| `POST /api/shell` | Interactive shell |
-
-```bash
-# Streaming
-curl -N -X POST http://localhost:8080/chat/stream \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Explain async/await"}'
-
-# Non-streaming
-curl -X POST http://localhost:8080/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Write hello world", "skill": "general-coder"}'
-```
+**No threads, no race conditions, no watchdog.** asyncio-native cancellation replaces the old thread supervisor.
 
 ## Configuration
 
@@ -189,7 +195,33 @@ All config lives in `~/.ata_coder/settings.json`:
 }
 ```
 
-Works with any OpenAI-compatible API: OpenAI, DeepSeek, Anthropic (via compatible gateway), OpenRouter, Ollama, and more.
+Works with any OpenAI-compatible API: **OpenAI**, **DeepSeek**, **Anthropic** (via compatible gateway), **OpenRouter**, **Ollama**, and more.
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Show help |
+| `/skills` | List available skills |
+| `/skill <name>` | Switch active skill |
+| `/review` | AI code review of git diff |
+| `/fix [severity]` | Auto-fix review issues |
+| `/undo [n]` | Undo file changes |
+| `/changes` | List tracked changes |
+| `/save` | Save current session |
+| `/resume <id>` | Resume saved session |
+| `/sessions` | List / search session history |
+| `/compact` | Compact conversation context |
+| `/context` | Show token usage + cost |
+| `/model <name>` | Switch model at runtime |
+| `/config` | Show current configuration |
+| `/vision <img> [prompt]` | Analyze image |
+| `/think` | Toggle thinking mode |
+| `/permissions` | Show permission rules |
+| `/git <sub>` | Git operations |
+| `/plan <task>` | Task planning |
+| `/remember` / `/recall` | Memory management |
+| `/mcp search <q>` | Search MCP tools |
 
 ## Project Structure
 
@@ -207,7 +239,7 @@ ata_coder/
 ├── core/                    # AgentEvent, AgentState, EventQueue
 ├── tools/                   # 14 tool handlers + executor
 ├── commands/                # Slash commands (/help /skills /model /context etc.)
-├── llm_client.py            # OpenAI-compatible async client
+├── llm_client.py            # OpenAI-compatible async client (httpx.AsyncClient)
 ├── anthropic_client.py      # Anthropic Messages API async client
 ├── skills.py                # Folder-based skill manager
 ├── extension.py             # Plugin/extension system
@@ -235,8 +267,6 @@ ata_coder/
 ├── server_rate_limit.py     # Token bucket rate limiter
 ├── prompt_template.py       # {% if %} templating engine
 ├── git_workflow.py          # Git integration
-├── clawd_integration.py     # Clawd desktop pet HTTP integration
-├── gui.py                   # Tkinter GUI
 ├── setup_wizard.py          # First-run setup wizard
 ├── skills/                  # Built-in skill folders
 ├── extensions/              # Plugin directory
@@ -245,67 +275,32 @@ ata_coder/
 └── README.md
 ```
 
-## Skills
+## Testing
 
-Skills live in `skills/<name>/` folders with `SKILL.md` manifest:
-
-```
-skills/weather-skill/
-├── SKILL.md           # name, version, triggers, tools, I/O spec
-├── handler.py         # Python entry point
-├── utils.py           # Helpers
-├── prompts/           # LLM prompt templates
-├── resources/         # Static data
-└── tests/             # pytest tests
+```bash
+pytest                                  # All tests
+pytest tests/ --ignore=tests/test_server.py   # Windows-safe
+pytest tests/test_tools.py -q                 # Single file
+pytest -k "agent" -q                          # Filter by name
 ```
 
 ## Contributing
 
-### Quick Start
+> 👋 **Want to dive in?** Whether it's your first PR or your hundredth, we've written a detailed participation guide just for you.
 
-```bash
-git clone https://github.com/jiaheng0815/ata-coder.git
-cd ata-coder
-python -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
-pip install -e ".[dev]"
-pytest tests/ --ignore=tests/test_server.py -q
-```
+<p align="center">
+  <strong>👉 <a href="./CONTRIBUTING.md">CONTRIBUTING.md</a> — The Official Participation Handbook</strong>
+</p>
 
-### Development Rules
+It covers everything: dev environment setup, architecture walkthrough, the iron rules for changes, commit format, testing strategy, code review checklist, and the release process. Read it before your first commit — it'll save you a round of review.
 
-These rules keep the codebase manageable for both human and AI contributors:
+A quick taste of what you'll find there:
 
-1. **One problem per change** — no refactoring alongside bugfixes.
-2. **No defensive coding** — don't add null-checks for unreproduced failures.
-3. **Never delete comments** — append corrections below, don't overwrite.
-
-| Limit | Value |
-|-------|-------|
-| Files per change | ≤ 3 |
-| Lines added+deleted | ≤ 200 |
-| McCabe per new function | ≤ 10 |
-| New dependencies | Zero without approval |
-
-### Commit Format
-
-```
-fix: [problem] -> [expected behavior]
-
-回滚方案：若合并后出现异常，请执行 git revert HEAD 无损回退。
-
-变更列表：
-- file.py: function_name — brief description
-```
-
-## Testing
-
-```bash
-pytest tests/ --ignore=tests/test_server.py     # Windows-safe
-pytest tests/test_tools.py -q                    # Single file
-pytest -k "agent" -q                             # Filter by name
-```
+- **One problem per change.** No drive-by refactoring.
+- **≤ 3 files, ≤ 200 lines per PR.** We enforce this mechanically.
+- **Never delete comments.** Append corrections; don't overwrite history.
+- **Commit messages follow a three-part format.** No "fix bug" one-liners.
 
 ## License
 
-MIT
+MIT © 2024–2026 ATA Coder Team. See [LICENSE](LICENSE) for full text.
