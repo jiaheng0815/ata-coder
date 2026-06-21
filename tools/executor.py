@@ -163,7 +163,11 @@ class ToolExecutor(FileOpsMixin, ShellExecMixin, SearchToolsMixin, WebToolsMixin
         self.clear_file_cache()
         if hasattr(self, "_http") and self._http is not None:
             try:
-                self._http.close()
+                # _http is a threading.local() wrapper — close the
+                # httpx.Client stored inside it (current-thread only).
+                client = getattr(self._http, "client", None)
+                if client is not None:
+                    client.close()
             except Exception:
                 logger.debug("Failed to close httpx client")
             self._http = None

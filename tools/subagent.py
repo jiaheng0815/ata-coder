@@ -1,4 +1,5 @@
 """Sub-agent, MCP search, and vision/image analysis — mixin for ToolExecutor."""
+import asyncio
 import html
 import html.parser
 import logging
@@ -266,8 +267,14 @@ class SubAgentToolsMixin:
                     "Authorization": f"Bearer {api_key}",
                 },
             )
-            with urlopen(req, timeout=120) as resp:
-                result = _json.loads(resp.read().decode("utf-8"))
+            loop = asyncio.get_running_loop()
+
+            def _do_vision_request():
+                with urlopen(req, timeout=120) as resp:
+                    return resp.read()
+
+            resp_data = await loop.run_in_executor(None, _do_vision_request)
+            result = _json.loads(resp_data.decode("utf-8"))
             content = (
                 result.get("choices", [{}])[0]
                 .get("message", {})

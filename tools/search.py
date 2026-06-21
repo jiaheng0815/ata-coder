@@ -137,7 +137,11 @@ class SearchToolsMixin:
         if "**" not in pattern:
             pattern = f"**/{pattern}"
         search_pattern = str(search_dir / pattern)
-        matches = glob_mod.glob(search_pattern, recursive=True)
+
+        def _do_glob():
+            return glob_mod.glob(search_pattern, recursive=True)
+
+        matches = await self._run_in_thread(_do_glob)
 
         if not matches:
             return ToolResult(
@@ -189,7 +193,8 @@ class SearchToolsMixin:
         output_lines = [f"Directory: {target}"]
         entries: list[str] = []
 
-        if recursive:
+        def _do_walk():
+            _entries: list[str] = []
             for root, dirs, files in os.walk(target):
                 dirs[:] = [
                     d for d in dirs
@@ -198,14 +203,18 @@ class SearchToolsMixin:
                 level = root.replace(str(target), "").count(os.sep)
                 indent = "  " * level
                 if level > 0:
-                    entries.append(f"{indent}{os.path.basename(root)}/")
+                    _entries.append(f"{indent}{os.path.basename(root)}/")
                 for f in sorted(files):
                     fp = os.path.join(root, f)
                     try:
                         size = os.path.getsize(fp)
                     except OSError:
                         size = 0  # broken symlink, permission denied, etc.
-                    entries.append(f"{indent}  {f}  ({size:,}B)")
+                    _entries.append(f"{indent}  {f}  ({size:,}B)")
+            return _entries
+
+        if recursive:
+            entries = await self._run_in_thread(_do_walk)
         else:
             items = sorted(target.iterdir(), key=lambda x: (not x.is_dir(), x.name))
             for item in items:
