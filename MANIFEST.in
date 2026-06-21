@@ -1,0 +1,4 @@
+prune web/node_modules
+prune build
+prune .pytest_cache
+prune .codegraph

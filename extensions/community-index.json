@@ -1,0 +1,79 @@
+{
+  "version": "1.0",
+  "updated": "2026-06-19T00:00:00Z",
+  "description": "ATA Coder Community Plugin Index — the canonical list of installable plugins.",
+  "plugins": [
+    {
+      "name": "sample-formatter",
+      "version": "0.1.0",
+      "description": "Auto-format Python code on file write using black/ruff. Enforces consistent style across all agent-generated code.",
+      "author": "ATA Coder Community",
+      "homepage": "https://github.com/jiaheng0815/ata-coder-plugins",
+      "package_name": "ata-coder-plugin-formatter",
+      "entry_point": "ata_coder_plugin_formatter:export_extension",
+      "license": "MIT",
+      "tags": ["tool", "formatter", "python"],
+      "min_ata_version": "2.5.0"
+    },
+    {
+      "name": "sql-linter",
+      "version": "0.1.0",
+      "description": "Lint and validate SQL queries in agent-generated code. Detects missing indexes, SELECT *, and SQL injection patterns.",
+      "author": "DB Tools Community",
+      "homepage": "https://github.com/jiaheng0815/ata-coder-plugins",
+      "package_name": "ata-coder-plugin-sql-lint",
+      "entry_point": "ata_coder_plugin_sql_lint:export_extension",
+      "license": "MIT",
+      "tags": ["linter", "sql", "security"],
+      "min_ata_version": "2.5.0"
+    },
+    {
+      "name": "git-conventional-commits",
+      "version": "0.2.0",
+      "description": "Enforce Conventional Commits format on all agent-generated commit messages. Validates feat/fix/chore prefixes and body format.",
+      "author": "GitOps Community",
+      "homepage": "https://github.com/jiaheng0815/ata-coder-plugins",
+      "package_name": "ata-coder-plugin-conventional-commits",
+      "entry_point": "ata_coder_plugin_cc:export_extension",
+      "license": "Apache-2.0",
+      "tags": ["tool", "git", "workflow"],
+      "min_ata_version": "2.5.0"
+    },
+    {
+      "name": "docstring-generator",
+      "version": "0.3.0",
+      "description": "Auto-generate Google-style docstrings for all new Python functions. Detects missing/outdated docstrings and fills them in.",
+      "author": "Docs Community",
+      "homepage": "https://github.com/jiaheng0815/ata-coder-plugins",
+      "package_name": "ata-coder-plugin-docstring",
+      "entry_point": "ata_coder_plugin_docstring:export_extension",
+      "license": "MIT",
+      "tags": ["skill", "documentation", "python"],
+      "min_ata_version": "2.5.0"
+    },
+    {
+      "name": "test-generator",
+      "version": "0.2.0",
+      "description": "Auto-generate pytest unit tests for new or modified functions. Analyzes function signatures and generates edge-case coverage.",
+      "author": "Testing Community",
+      "homepage": "https://github.com/jiaheng0815/ata-coder-plugins",
+      "package_name": "ata-coder-plugin-test-gen",
+      "entry_point": "ata_coder_plugin_test_gen:export_extension",
+      "license": "MIT",
+      "tags": ["skill", "testing", "python"],
+      "min_ata_version": "2.5.0"
+    },
+    {
+      "name": "todo-tracker",
+      "version": "0.1.0",
+      "description": "Track TODO/FIXME/HACK comments across the codebase. Generates a report with file locations, ages, and suggested priorities.",
+      "author": "PM Tools Community",
+      "homepage": "https://github.com/jiaheng0815/ata-coder-plugins",
+      "package_name": "ata-coder-plugin-todo",
+      "entry_point": "ata_coder_plugin_todo:export_extension",
+      "license": "MIT",
+      "tags": ["tool", "tracking", "maintenance"],
+      "min_ata_version": "2.5.0"
+    }
+  ]
+}

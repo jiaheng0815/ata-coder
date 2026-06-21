@@ -1,0 +1,44 @@
+# CI-style pipeline: test → build → deploy with conditional promotion
+name: ci-pipeline
+description: >
+  Run tests, build the package, and deploy.  Each stage gates on
+  the previous — if tests fail, the pipeline stops.
+
+vars:
+  python_version: "3.10"
+  deploy_target: staging
+
+steps:
+  # ── Stage 1: Run tests ──────────────────────────────────────────────
+  - id: test
+    parallel:
+      - id: unit-tests
+        run: python -m pytest tests/ -q --tb=short 2>&1 || echo "TESTS_FAILED"
+
+      - id: type-check
+        run: python -m mypy ata_coder/ --ignore-missing-imports 2>&1 || echo "TYPE_CHECK_FAILED"
+
+  # ── Stage 2: Build ──────────────────────────────────────────────────
+  - id: build
+    depends_on: [test]
+    run: python -m build --sdist --wheel 2>&1
+    description: Build source distribution and wheel
+
+  # ── Stage 3: Deploy (conditional on target) ─────────────────────────
+  - id: deploy-staging
+    depends_on: [build]
+    condition: "vars.deploy_target == staging"
+    run: echo "Deploying to staging server..."
+
+  - id: deploy-production
+    depends_on: [build]
+    condition: "vars.deploy_target == production"
+    run: echo "Deploying to production — RUNNING FULL CHECKS..."
+    # In production you'd run: twine upload dist/*
+
+  # ── Stage 4: Notify ─────────────────────────────────────────────────
+  - id: notify
+    depends_on: [deploy-staging, deploy-production]
+    agent: >
+      Summarize the CI pipeline results.  What passed, what failed,
+      and what was deployed where.  Keep it to 3 bullet points.

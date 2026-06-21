@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>ATA Coder</title>
+<style>
+/* ═══════════════════════════ One Dark Pro Theme ═══════════════════════════ */
+:root {
+    --bg: #282C34;        --bg-panel: #21252B;    --bg-input: #1E2127;
+    --fg: #ABB2BF;        --comment: #5C6370;
+    --red: #E06C75;       --green: #98C379;       --yellow: #D19A66;
+    --blue: #61AFEF;      --purple: #C678DD;      --cyan: #56B6C2;
+    --orange: #E5C07B;    --border: #3A3F4B;
+    --radius: 10px;       --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg); color: var(--fg);
+    height: 100vh; overflow: hidden; display: flex;
+}
+
+/* ═══════════════════════════ Sidebar ═══════════════════════════ */
+.sidebar {
+    width: 260px; background: var(--bg-panel); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; padding: 16px;
+    flex-shrink: 0; gap: 12px;
+}
+.sidebar h2 {
+    font-size: 14px; color: var(--cyan); text-transform: uppercase;
+    letter-spacing: 1px; margin-bottom: 4px;
+}
+.sidebar select, .sidebar input {
+    width: 100%; background: var(--bg-input); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 10px; font-size: 13px; outline: none;
+    transition: border var(--transition);
+}
+.sidebar select:focus, .sidebar input:focus { border-color: var(--blue); }
+.sidebar label { font-size: 11px; color: var(--comment); margin-bottom: -8px; }
+
+/* ═══════════════════════════ Main Chat ═══════════════════════════ */
+.main {
+    flex: 1; display: flex; flex-direction: column; min-width: 0;
+}
+.chat {
+    flex: 1; overflow-y: auto; padding: 24px;
+    scroll-behavior: smooth;
+}
+.input-area {
+    border-top: 1px solid var(--border); padding: 16px 24px;
+    display: flex; gap: 10px;
+}
+.input-area textarea {
+    flex: 1; background: var(--bg-input); color: var(--fg);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px 16px; font-size: 14px; resize: none; outline: none;
+    min-height: 48px; max-height: 200px; font-family: inherit;
+    transition: border var(--transition);
+}
+.input-area textarea:focus { border-color: var(--blue); }
+.input-area button {
+    background: var(--blue); color: #fff; border: none;
+    border-radius: var(--radius); padding: 12px 24px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: all var(--transition); white-space: nowrap;
+}
+.input-area button:hover { filter: brightness(1.15); transform: translateY(-1px); }
+.input-area button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ═══════════════════════════ Messages ═══════════════════════════ */
+.msg { margin-bottom: 20px; animation: fadeIn 0.3s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.msg.user { text-align: right; }
+.msg.user .bubble { background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius) var(--radius) 4px var(--radius); }
+.msg.agent .bubble { background: transparent; border-left: 3px solid var(--blue); border-radius: 0 var(--radius) var(--radius) 0; padding-left: 16px; }
+.bubble {
+    display: inline-block; max-width: 85%; padding: 12px 16px;
+    text-align: left; font-size: 14px; line-height: 1.6;
+    word-wrap: break-word; overflow-wrap: break-word;
+}
+.bubble pre {
+    background: #1a1d23; border-radius: 8px; padding: 16px;
+    overflow-x: auto; margin: 8px 0; font-size: 13px;
+    border: 1px solid var(--border);
+}
+.bubble code { font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace; font-size: 13px; }
+.bubble p { margin: 4px 0; }
+.bubble ul, .bubble ol { margin: 4px 0; padding-left: 20px; }
+.tool-call {
+    font-size: 12px; color: var(--comment); margin: 4px 0;
+    padding: 4px 10px; background: var(--bg-panel); border-radius: 4px;
+    display: inline-block;
+}
+.thinking { color: var(--comment); font-style: italic; font-size: 12px; margin: 4px 0; }
+.thinking-block { color: var(--comment); font-style: italic; font-size: 12px; margin: 6px 0; padding: 6px 10px; background: var(--bg-panel); border-radius: 6px; border-left: 2px solid var(--border); white-space: pre-wrap; word-wrap: break-word; max-height: 120px; overflow-y: auto; }
+.typing { color: var(--cyan); }
+.typing::after { content: '▊'; animation: blink 0.8s infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ═══════════════════════════ Setup Overlay ═══════════════════════════ */
+.setup-overlay {
+    position: fixed; inset: 0; background: var(--bg);
+    z-index: 100; display: flex; align-items: center; justify-content: center;
+    transition: opacity 0.4s ease, visibility 0.4s;
+}
+.setup-overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+.setup-card {
+    background: var(--bg-panel); border-radius: 16px; padding: 40px;
+    max-width: 480px; width: 90%; border: 1px solid var(--border);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+}
+.setup-card h1 { color: var(--blue); margin-bottom: 8px; font-size: 28px; }
+.setup-card p { color: var(--comment); margin-bottom: 24px; font-size: 14px; }
+.step { display: none; }
+.step.active { display: block; animation: fadeIn 0.4s ease; }
+.setup-card select, .setup-card input {
+    width: 100%; background: var(--bg-input); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 14px; font-size: 14px; outline: none; margin-bottom: 16px;
+}
+.setup-card select:focus, .setup-card input:focus { border-color: var(--blue); }
+.setup-card button {
+    width: 100%; background: var(--blue); color: #fff; border: none;
+    border-radius: 8px; padding: 12px; font-size: 15px; font-weight: 600;
+    cursor: pointer; transition: all var(--transition);
+}
+.setup-card button:hover { filter: brightness(1.15); }
+.setup-card button:disabled { opacity: 0.4; cursor: not-allowed; }
+.status-bar {
+    font-size: 12px; color: var(--comment); margin-bottom: 12px;
+    text-align: center; min-height: 18px;
+}
+
+/* ═══════════════════════════ Spinner ═══════════════════════════ */
+.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ═══════════════════════════ Mobile ═══════════════════════════ */
+.sidebar-toggle {
+    display: none; position: fixed; top: 12px; left: 12px; z-index: 50;
+    background: var(--bg-panel); border: 1px solid var(--border); color: var(--fg);
+    width: 40px; height: 40px; border-radius: 8px; font-size: 20px;
+    cursor: pointer; align-items: center; justify-content: center;
+}
+@media (max-width: 768px) {
+    .sidebar-toggle { display: flex; }
+    .sidebar {
+        position: fixed; left: -280px; top: 0; bottom: 0; z-index: 40;
+        width: 260px; transition: left var(--transition);
+    }
+    .sidebar.open { left: 0; box-shadow: 4px 0 20px rgba(0,0,0,0.5); }
+    .input-area { padding: 10px 12px; gap: 6px; }
+    .input-area textarea { font-size: 16px; } /* prevent iOS zoom */
+    .input-area button { padding: 10px 16px; font-size: 14px; }
+    .chat { padding: 12px; }
+    .bubble { max-width: 95% !important; font-size: 14px; }
+    .setup-card { padding: 24px; }
+    .setup-card h1 { font-size: 22px; }
+}
+
+/* Connection status bar */
+.conn-bar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 99;
+    text-align: center; font-size: 11px; padding: 3px; display: none;
+}
+.conn-bar.lan { background: var(--green); color: #000; display: block; }
+.conn-bar.local { background: var(--yellow); color: #000; display: block; }
+
+/* ═══════════════════════════ Terminal ═══════════════════════════ */
+.term-panel { border-top: 1px solid var(--border); display: none; flex-direction: column; }
+.term-panel.open { display: flex; }
+.term-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 16px; background: var(--bg-panel); border-bottom: 1px solid var(--border);
+    font-size: 12px; color: var(--comment);
+}
+.term-output {
+    flex: 1; min-height: 120px; max-height: 300px; overflow-y: auto;
+    padding: 8px 16px; font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 13px; background: #1a1d23; color: var(--fg);
+    white-space: pre-wrap; word-wrap: break-word;
+}
+.term-input-row {
+    display: flex; gap: 8px; padding: 8px 16px; background: var(--bg-panel);
+}
+.term-input-row input {
+    flex: 1; background: var(--bg-input); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 12px; font-size: 13px; font-family: 'Cascadia Code', monospace;
+    outline: none;
+}
+.term-input-row input:focus { border-color: var(--blue); }
+.term-input-row button {
+    background: var(--purple); color: #fff; border: none;
+    border-radius: 6px; padding: 6px 14px; font-size: 12px; cursor: pointer;
+}
+</style>
+</head>
+<body>
+
+<div class="conn-bar" id="conn-bar"></div>
+<button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')">☰</button>
+
+<!-- ════════════════ Setup Overlay ════════════════ -->
+<div class="setup-overlay" id="setup">
+  <div class="setup-card">
+    <h1>ATA Coder</h1>
+    <div class="status-bar" id="status"></div>
+
+    <div class="step active" id="s-model">
+      <p>Fetching available models…</p>
+      <div style="text-align:center"><span class="spinner"></span></div>
+    </div>
+
+    <div class="step" id="s-workspace">
+      <p>Working directory <span style="color:var(--comment);font-size:11px">(on server)</span></p>
+      <input id="workspace-path" placeholder="D:\projects\my-app">
+      <button onclick="nextStep('skill')">Next →</button>
+    </div>
+
+    <div class="step" id="s-skill">
+      <p>Choose skill</p>
+      <select id="skill-select"><option value="">Default</option></select>
+      <button onclick="nextStep('thinking')">Next →</button>
+    </div>
+
+    <div class="step" id="s-thinking">
+      <p>Thinking strength</p>
+      <select id="thinking-select">
+        <option value="" selected>Default (no thinking)</option>
+        <option value="off">Off (explicit disable)</option>
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+        <option value="xhigh">X-High</option>
+        <option value="max">Max (⚠ slow, everything becomes thinking)</option>
+      </select>
+      <button onclick="startChat()">Start →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ Sidebar ════════════════ -->
+<div class="sidebar">
+  <h2>Model</h2>
+  <select id="model-select" onchange="setModel()"><option value="">Loading…</option></select>
+
+  <h2>Skill</h2>
+  <select id="skill-sidebar" onchange="setSkill()"><option value="">Default</option></select>
+
+  <h2>Thinking</h2>
+  <select id="thinking-sidebar" onchange="setThinking()">
+    <option value="">Off</option><option value="low">Low</option>
+    <option value="medium">Medium</option><option value="high">High</option>
+    <option value="xhigh">X-High</option><option value="max">Max ⚠</option>
+  </select>
+
+  <h2>Workspace <span style="font-size:10px;color:var(--comment)">(server)</span></h2>
+  <input id="ws-sidebar" onchange="setWorkspace()">
+
+  <div style="flex:1"></div>
+  <button style="background:transparent;border:1px solid var(--border);color:var(--purple);border-radius:6px;padding:8px;cursor:pointer;font-size:12px;margin-bottom:4px" onclick="toggleTerm()">💻 Terminal</button>
+  <button style="background:transparent;border:1px solid var(--border);color:var(--comment);border-radius:6px;padding:8px;cursor:pointer;font-size:12px" onclick="clearChat()">Clear Chat</button>
+</div>
+
+<!-- ════════════════ Main Chat ════════════════ -->
+<div class="main">
+  <div class="chat" id="chat"></div>
+
+  <!-- Terminal Panel -->
+  <div class="term-panel" id="term-panel">
+    <div class="term-header">
+      <span>💻 PowerShell (remote)</span>
+      <span style="cursor:pointer;font-size:16px" onclick="toggleTerm()" title="Close">×</span>
+    </div>
+    <div class="term-output" id="term-output">PS D:\code\ata_coder&gt; _</div>
+    <div class="term-input-row">
+      <input id="term-input" placeholder="Type PowerShell command..." onkeydown="if(event.key==='Enter')runShell()">
+      <button onclick="runShell()">Run</button>
+    </div>
+  </div>
+
+  <div class="input-area">
+    <textarea id="input" placeholder="Type your task…  (Enter to send, Shift+Enter for newline)" rows="1"
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send()}"></textarea>
+    <button id="send-btn" onclick="send()">Send</button>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════ State ═══════════════════════════ */
+const HOST = '';
+let config = { model: '', skill: '', thinking: '', workspace: '' }; // thinking '' = no override
+let currentMsg = null;
+let streaming = false;
+
+/* ═══════════════════════════ Setup Flow ═══════════════════════════ */
+async function init() {
+    // Fetch models
+    try {
+        const r = await fetch(HOST + '/models');
+        const d = await r.json();
+        const sel = document.getElementById('model-select');
+        const sidebar = document.getElementById('skill-select');
+        d.models.forEach(m => {
+            sel.innerHTML += `<option value="${m.id}">${m.id}</option>`;
+        });
+        if (d.current) { sel.value = d.current; config.model = d.current; }
+        document.getElementById('model-select').value = config.model;
+
+        document.getElementById('s-model').innerHTML =
+            `<p style="text-align:center;color:var(--green);font-size:40px">✓</p>
+             <p>${d.models.length} models loaded</p>
+             <select id="setup-model" style="margin-bottom:16px">${sel.innerHTML}</select>
+             <button onclick="config.model=document.getElementById('setup-model').value;nextStep('workspace')">Next →</button>`;
+    } catch(e) {
+        document.getElementById('s-model').innerHTML =
+            `<p style="color:var(--red)">Failed to fetch models</p>
+             <input id="setup-model" placeholder="Enter model name" value="deepseek-v4-pro">
+             <button onclick="config.model=document.getElementById('setup-model').value;nextStep('workspace')">Next →</button>`;
+    }
+
+    // Fetch skills (with retry)
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            const r = await fetch(HOST + '/skills');
+            const d = await r.json();
+            const skills = d.skills || [];
+            ['skill-select', 'skill-sidebar'].forEach(id => {
+                const sel = document.getElementById(id);
+                sel.innerHTML = '<option value="">Default (auto-detect)</option>';
+                skills.forEach(s => sel.innerHTML += `<option value="${s.name}">${s.name}</option>`);
+            });
+            if (skills.length > 0) break;
+        } catch(e) { if (attempt < 2) await new Promise(r => setTimeout(r, 500)); }
+    }
+
+    // Fetch workspace
+    try {
+        const r = await fetch(HOST + '/api/workspace');
+        const d = await r.json();
+        config.workspace = d.workspace || '';
+        document.getElementById('workspace-path').value = config.workspace;
+        document.getElementById('ws-sidebar').value = config.workspace;
+    } catch(e) {}
+
+    document.getElementById('thinking-sidebar').value = config.thinking;
+}
+
+function nextStep(step) {
+    document.querySelectorAll('.step.active').forEach(s => s.classList.remove('active'));
+    const el = document.getElementById('s-' + step);
+    if (el) el.classList.add('active');
+}
+
+async function startChat() {
+    config.thinking = document.getElementById('thinking-select').value;
+    config.model = document.getElementById('setup-model')?.value || config.model;
+    config.workspace = document.getElementById('workspace-path').value || config.workspace;
+    config.skill = document.getElementById('skill-select').value;
+
+    document.getElementById('model-select').value = config.model;
+    document.getElementById('thinking-sidebar').value = config.thinking;
+    document.getElementById('skill-sidebar').value = config.skill;
+    document.getElementById('ws-sidebar').value = config.workspace;
+
+    // Set workspace on server
+    if (config.workspace) {
+        try { await fetch(HOST + '/api/workspace', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({workspace: config.workspace})}); } catch(e){}
+    }
+
+    document.getElementById('setup').classList.add('hidden');
+}
+
+/* ═══════════════════════════ Chat ═══════════════════════════ */
+async function send() {
+    const input = document.getElementById('input');
+    const msg = input.value.trim();
+    if (!msg) return;
+    if (streaming) { console.log('send blocked: already streaming'); return; }
+    input.value = '';
+    input.style.height = 'auto';
+    document.getElementById('send-btn').disabled = true;
+    streaming = true;
+    // Safety: reset streaming after 5 minutes
+    const safetyTimer = setTimeout(() => { streaming = false; document.getElementById('send-btn').disabled = false; }, 300000);
+
+    appendMessage('user', msg);
+
+    // Agent message bubble
+    const chat = document.getElementById('chat');
+    const div = document.createElement('div');
+    div.className = 'msg agent';
+    div.innerHTML = '<div class="bubble"><span class="typing">Thinking…</span></div>';
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+    currentMsg = div.querySelector('.bubble');
+
+    let fullText = '';
+    try {
+        const body = {
+            message: msg,
+            skill: config.skill || undefined,
+            model: config.model,
+            thinking: config.thinking || undefined,
+        };
+        const r = await fetch(HOST + '/chat/stream', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(body),
+        });
+        if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            currentMsg.innerHTML = `<span style="color:var(--red)">HTTP ${r.status}: ${err.error || r.statusText}</span>`;
+            clearTimeout(safetyTimer);
+            streaming = false;
+            document.getElementById('send-btn').disabled = false;
+            return;
+        }
+        const reader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, {stream: true});
+            const lines = buf.split('\n');
+            buf = lines.pop() || '';
+
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const data = line.slice(6);
+                if (data === '[DONE]') continue;
+                try {
+                    const ev = JSON.parse(data);
+                    if (!ev || !ev.type) continue;
+                    switch (ev.type) {
+                    case 'text':
+                        fullText += (ev.text || '');
+                        currentMsg.innerHTML = renderMarkdown(fullText);
+                        break;
+                    case 'thinking':
+                        // Accumulate thinking into a single dim block
+                        let th = currentMsg.querySelector('.thinking-block');
+                        if (!th) {
+                            th = document.createElement('div');
+                            th.className = 'thinking-block';
+                            currentMsg.appendChild(th);
+                        }
+                        th.textContent += (ev.text || '');
+                        break;
+                    case 'tool_call':
+                        const tc = document.createElement('div');
+                        tc.className = 'tool-call';
+                        tc.textContent = '🔧 ' + (ev.tool || 'tool');
+                        currentMsg.appendChild(tc);
+                        break;
+                    case 'tool_result':
+                        const tr = document.createElement('div');
+                        tr.className = 'tool-call';
+                        tr.textContent = (ev.ok ? '✓' : '✗') + ' ' + (ev.tool || '');
+                        tr.style.color = ev.ok ? 'var(--green)' : 'var(--red)';
+                        currentMsg.appendChild(tr);
+                        break;
+                    case 'error':
+                        const er = document.createElement('div');
+                        er.className = 'tool-call';
+                        er.style.color = 'var(--red)';
+                        er.textContent = '❌ ' + (ev.error || '');
+                        currentMsg.appendChild(er);
+                        break;
+                    }
+                } catch(e) {}
+            }
+            chat.scrollTop = chat.scrollHeight;
+        }
+    } catch(e) {
+        currentMsg.innerHTML = `<span style="color:var(--red)">Connection error: ${e.message}</span>`;
+        clearTimeout(safetyTimer);
+        streaming = false;
+        document.getElementById('send-btn').disabled = false;
+    }
+
+    // If model only returned thinking (no text), show the thinking as response
+    if (!fullText) {
+        const th = currentMsg.querySelector('.thinking-block');
+        if (th && th.textContent.trim()) {
+            fullText = th.textContent.trim();
+            currentMsg.innerHTML = renderMarkdown(fullText);
+        } else {
+            currentMsg.innerHTML = renderMarkdown('*(no response)*');
+        }
+    }
+    clearTimeout(safetyTimer);
+    streaming = false;
+    document.getElementById('send-btn').disabled = false;
+    document.getElementById('input').focus();
+}
+
+function appendMessage(role, text) {
+    const chat = document.getElementById('chat');
+    const div = document.createElement('div');
+    div.className = `msg ${role}`;
+    div.innerHTML = `<div class="bubble">${escapeHtml(text)}</div>`;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+/* ═══════════════════════════ Markdown ═══════════════════════════ */
+function renderMarkdown(text) {
+    let html = escapeHtml(text);
+    // Code blocks — syntax highlight Python (and similar langs)
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+        const highlighted = (lang === 'python' || lang === 'py' || !lang)
+            ? highlightCode(code.trim(), lang || 'python')
+            : escapeHtml(code.trim());
+        return `<pre><code class="language-${lang||'text'}">${highlighted}</code></pre>`;
+    });
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Bold
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    // Italic
+    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    // Newlines
+    html = html.replace(/\n/g, '<br>');
+    return html;
+}
+
+/* ═══════════════════════ Syntax highlighting ═══════════════════════ */
+const HL = {
+    keyword: 'color:#C678DD;font-weight:bold',    // purple/pink: def class if for while return import
+    string:  'color:#98C379',                      // green: "strings"
+    number:  'color:#D19A66',                      // orange: 42 3.14
+    func:    'color:#61AFEF',                      // blue: function_name()
+    class:   'color:#E5C07B',                      // yellow: ClassName
+    var:     'color:#E06C75',                      // red: variable_name
+    comment: 'color:#5C6370;font-style:italic',    // gray: # comments
+    builtin: 'color:#56B6C2',                      // cyan: print len range
+    none:    'color:#D19A66;font-weight:bold',     // orange bold: None True False
+    decorator:'color:#E5C07B',                     // yellow: @decorator
+    op:      'color:#56B6C2',                      // cyan: + - * / = ==
+    fg:      'color:#ABB2BF',                      // default foreground
+};
+const _KW = new Set(['def','class','if','elif','else','for','while','return','import','from','as','try',
+    'except','finally','with','as','yield','raise','assert','pass','break','continue','and','or','not',
+    'in','is','lambda','global','nonlocal','del','async','await']);
+const _BT = new Set(['print','len','range','int','str','float','bool','list','dict','set','tuple',
+    'type','isinstance','super','enumerate','zip','map','filter','sorted','reversed','any','all',
+    'open','input','round','abs','min','max','sum','pow','divmod','ord','chr','repr','id','dir',
+    'hasattr','getattr','setattr','vars','callable','compile','exec','eval','__import__']);
+const _NN = new Set(['None','True','False','null','undefined','NaN','Infinity']);
+
+function highlightCode(code, lang) {
+    // Tokenize and color
+    let out = '';
+    let i = 0;
+    const n = code.length;
+    while (i < n) {
+        // Comments
+        if (code[i] === '#' && (i===0 || code[i-1]!=='\\')) {
+            let end = code.indexOf('\n', i);
+            if (end === -1) end = n;
+            out += `<span style="${HL.comment}">${escapeHtml(code.slice(i, end))}</span>`;
+            i = end;
+            continue;
+        }
+        // Strings
+        if (code[i] === '"' || code[i] === "'") {
+            const q = code[i];
+            let j = i + 1;
+            while (j < n && code[j] !== q) {
+                if (code[j] === '\\') j++;
+                j++;
+            }
+            if (j < n) j++; // closing quote
+            out += `<span style="${HL.string}">${escapeHtml(code.slice(i, j))}</span>`;
+            i = j;
+            continue;
+        }
+        // Decorators
+        if (code[i] === '@' && (i===0 || code[i-1]==='\n')) {
+            let j = i + 1;
+            while (j < n && /[a-zA-Z0-9_.]/.test(code[j])) j++;
+            out += `<span style="${HL.decorator}">${escapeHtml(code.slice(i, j))}</span>`;
+            i = j;
+            continue;
+        }
+        // Numbers
+        if (/[0-9]/.test(code[i]) && (i===0 || !/[a-zA-Z_]/.test(code[i-1]))) {
+            let j = i;
+            while (j < n && /[0-9a-fA-FxX._]/.test(code[j])) j++;
+            out += `<span style="${HL.number}">${escapeHtml(code.slice(i, j))}</span>`;
+            i = j;
+            continue;
+        }
+        // Words (keywords, builtins, None/True/False, functions, classes, variables)
+        if (/[a-zA-Z_]/.test(code[i])) {
+            let j = i;
+            while (j < n && /[a-zA-Z0-9_]/.test(code[j])) j++;
+            const word = code.slice(i, j);
+            const escaped = escapeHtml(word);
+            if (_NN.has(word)) {
+                out += `<span style="${HL.none}">${escaped}</span>`;
+            } else if (_KW.has(word)) {
+                out += `<span style="${HL.keyword}">${escaped}</span>`;
+            } else if (_BT.has(word)) {
+                out += `<span style="${HL.builtin}">${escaped}</span>`;
+            } else if (j < n && code[j] === '(') {
+                // Function call
+                out += `<span style="${HL.func}">${escaped}</span>`;
+            } else if (word[0] === word[0].toUpperCase() && word[0] !== '_') {
+                // Class-like (starts with uppercase)
+                out += `<span style="${HL.class}">${escaped}</span>`;
+            } else {
+                // Variable
+                out += `<span style="${HL.var}">${escaped}</span>`;
+            }
+            i = j;
+            continue;
+        }
+        // Operators
+        if ('+-*/%=<>!&|^~'.includes(code[i])) {
+            out += `<span style="${HL.op}">${escapeHtml(code[i])}</span>`;
+            i++;
+            continue;
+        }
+        // Default
+        out += escapeHtml(code[i]);
+        i++;
+    }
+    return out;
+}
+
+function escapeHtml(text) {
+    return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ═══════════════════════════ Sidebar Actions ═══════════════════════════ */
+function setModel() { config.model = document.getElementById('model-select').value; }
+function setSkill() { config.skill = document.getElementById('skill-sidebar').value; }
+function setThinking() { config.thinking = document.getElementById('thinking-sidebar').value; }
+async function setWorkspace() {
+    const ws = document.getElementById('ws-sidebar').value;
+    config.workspace = ws;
+    try { await fetch(HOST + '/api/workspace', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({workspace: ws})}); } catch(e) {}
+}
+function clearChat() { document.getElementById('chat').innerHTML = ''; }
+
+// Auto-resize textarea
+document.getElementById('input').addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 200) + 'px';
+});
+
+/* ═══════════════════════════ Terminal ═══════════════════════════ */
+let shellSession = '';
+
+async function toggleTerm() {
+    const p = document.getElementById('term-panel');
+    p.classList.toggle('open');
+    if (p.classList.contains('open')) {
+        document.getElementById('term-input').focus();
+        if (!shellSession) await openShell();
+    }
+}
+async function openShell() {
+    const out = document.getElementById('term-output');
+    try {
+        const r = await fetch(HOST + '/api/shell', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({action: 'open'}),
+        });
+        const d = await r.json();
+        shellSession = d.session;
+        out.textContent = 'Connected to remote PowerShell.\n' + d.prompt + ' ';
+    } catch(e) {
+        out.textContent = `Failed to connect: ${e.message}\n`;
+    }
+}
+async function runShell() {
+    const input = document.getElementById('term-input');
+    const out = document.getElementById('term-output');
+    const cmd = input.value.trim();
+    if (!cmd) return;
+    if (!shellSession) { await openShell(); if (!shellSession) return; }
+    input.value = '';
+    input.focus();
+    out.textContent += cmd + '\n';
+    // Progress indicator
+    const prog = document.createElement('div');
+    prog.style.cssText = 'color:var(--comment);font-size:11px;padding:2px 6px';
+    prog.textContent = 'Running...';
+    out.appendChild(prog);
+    out.scrollTop = out.scrollHeight;
+
+    let lineCount = 0;
+    const frames = ['|','/','-','\\'];
+    let fi = 0;
+    const spinner = setInterval(() => {
+        const info = lineCount > 0 ? ` (${lineCount} lines)` : '';
+        prog.textContent = `${frames[fi]} Running...${info}`;
+        fi = (fi + 1) % frames.length;
+    }, 200);
+
+    try {
+        const r = await fetch(HOST + '/api/shell', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({session: shellSession, command: cmd}),
+        });
+        if (!r.ok) { clearInterval(spinner); prog.textContent = `✗ HTTP ${r.status}`; return; }
+
+        const reader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+            const {done, value} = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, {stream: true});
+            const lines = buf.split('\n');
+            buf = lines.pop() || '';
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                try {
+                    const ev = JSON.parse(line.slice(6));
+                    if (ev.text) { out.insertBefore(document.createTextNode(ev.text), prog); lineCount++; }
+                } catch(e) {}
+            }
+            out.scrollTop = out.scrollHeight;
+        }
+    } catch(e) {
+        clearInterval(spinner);
+        prog.textContent = `✗ ${e.message}`;
+        return;
+    }
+    clearInterval(spinner);
+    prog.textContent = `✓ Done (${lineCount} lines)`;
+    setTimeout(() => prog.remove(), 2000);
+    out.scrollTop = out.scrollHeight;
+    if (out.textContent.length > 50000) {
+        out.textContent = out.textContent.slice(-30000);
+    }
+}
+
+// Show connection type
+if (location.hostname === '127.0.0.1' || location.hostname === 'localhost') {
+    const bar = document.getElementById('conn-bar');
+    bar.className = 'conn-bar local';
+    bar.textContent = '💻 Localhost';
+    setTimeout(() => bar.style.display = 'none', 3000);
+} else {
+    const bar = document.getElementById('conn-bar');
+    bar.className = 'conn-bar lan';
+    bar.textContent = '📶 LAN — ' + location.hostname;
+    setTimeout(() => bar.style.display = 'none', 5000);
+}
+
+init();
+</script>
+</body>
+</html>

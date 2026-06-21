@@ -1,0 +1,116 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ata-coder"
+version = "1.0.0"
+description = "ATA Coder — CLI AI coding assistant for OpenAI & Anthropic APIs"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    {name = "ATA Coder Team"}
+]
+dependencies = [
+    "click>=8.0",
+    "httpx>=0.27.0,<1.0",
+    "colorama>=0.4.6",
+    "python-dotenv>=1.0.0",
+    "rich>=13.0.0",
+    "pyyaml>=6.0",
+    "prompt-toolkit>=3.0",
+]
+
+[project.scripts]
+ata = "ata_coder.main:main"
+
+[project.optional-dependencies]
+cst = ["libcst>=1.0"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.21",
+    "pytest-timeout>=2.0",
+    "tiktoken>=0.5.0",
+]
+
+[tool.setuptools]
+packages = ["ata_coder", "ata_coder.core", "ata_coder.tools", "ata_coder.commands"]
+
+[tool.setuptools.package-dir]
+ata_coder = "."
+
+[tool.setuptools.package-data]
+ata_coder = [
+    "skills/**/*.md",
+    "skills/**/*.json",
+    "skills/**/*.yaml",
+    "skills/**/*.yml",
+    "skills/**/*.txt",
+    "skills/**/*.py",
+    "skills/**/*.example",
+    "skills/**/requirements.txt",
+    "prompts/**/*.md",
+    "extensions/**/*.py",
+    "web/**/*.html",
+    "web/**/*.css",
+    "web/**/*.js",
+    "web/**/*.json",
+]
+
+[tool.setuptools.exclude-package-data]
+ata_coder = [
+    "tests/*",
+    "examples/*",
+    "__pycache__/*",
+    "*.pyc",
+    "skills/**/__pycache__/*",
+    "skills/**/*.pyc",
+    ".ata_coder/*",
+    ".claude/*",
+    ".codegraph/*",
+    ".git/*",
+    ".pytest_cache/*",
+    ".vscode/*",
+    "web/node_modules/**/*",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+exclude = ["build", "dist", ".git", "__pycache__", ".pytest_cache", "web/node_modules", "examples", "skills/*/tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "SIM", "RET", "BLE", "ISC"]
+ignore = ["E501", "E402", "E701", "E722", "E741", "E731", "F821"]
+
+[tool.ruff.lint.per-file-ignores]
+# repl_ui.py + terminal.py: rich/colorama imports are availability checks
+"repl_ui.py" = ["F401"]
+"terminal.py" = ["F401"]
+# Skill handlers + tests: some imports are for dynamic loading or optional deps
+"skills/*/handler.py" = ["F401"]
+"tests/*.py" = ["F401", "F841"]
+# E501: line too long (enforced by formatter instead)
+# E402: imports after sys.path.insert (intentional in main/server/gui)
+# E701: multiple statements on one line (compact error handling)
+# E722: bare except (intentional for cleanup/shutdown paths)
+# E741: ambiguous variable name (l for loop vars)
+# E731: lambda assignment (trivial inline helpers, not exported)
+# F821: undefined name (optional deps guarded by try/except)
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+exclude = ["build/", "dist/", ".pytest_cache/", "web/node_modules/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+asyncio_mode = "auto"
+addopts = "-v --tb=short"
+markers = [
+    "slow: tests that take >5s (network, subprocess, large I/O)",
+    "integration: tests that require network or external services",
+    "server: HTTP server tests (require networking)",
+]

@@ -1,0 +1,34 @@
+{
+  "name": "@ata-coder/server",
+  "version": "2.5.3",
+  "description": "ATA Coder — TypeScript-native CLI & HTTP API server (Node.js 24+)",
+  "type": "module",
+  "bin": {
+    "ata": "src/cli.ts",
+    "ata-server": "src/server.ts"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node --experimental-transform-types src/cli.ts",
+    "server": "node --experimental-transform-types src/server.ts",
+    "dev": "node --watch --experimental-transform-types src/cli.ts",
+    "test": "node --experimental-transform-types --test src/**/*.test.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "node-pty": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0"
+  },
+  "keywords": ["ata-coder", "cli", "ai", "coding-assistant", "typescript", "node24"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jiaheng0815/ata-coder.git",
+    "directory": "ts-server"
+  }
+}

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#282C34">
+<title>ATA Coder</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ── Sidebar Overlay (mobile) ── -->
+<div class="overlay" id="overlay"></div>
+
+<!-- ── Sidebar ── -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <div class="logo">⚡ ATA Coder <span id="logo-ver">v2.2.0</span></div>
+  </div>
+  <div class="sidebar-body">
+    <div class="sidebar-section">
+      <h4>Model</h4>
+      <select id="model-select">
+        <option>loading…</option>
+      </select>
+    </div>
+    <div class="sidebar-section">
+      <h4>Skills</h4>
+      <div id="skill-tags"><span class="skill-tag">general-coder</span></div>
+    </div>
+    <div class="sidebar-section">
+      <h4>Workspace</h4>
+      <div class="val" id="ws-path">…</div>
+    </div>
+  </div>
+  <div class="sidebar-footer">
+    <div class="shortcut" data-cmd="/clear"><kbd>/clear</kbd> New chat</div>
+    <div class="shortcut" data-cmd="/history"><kbd>/history</kbd> Sessions</div>
+    <div class="shortcut" data-cmd="/skills"><kbd>/skills</kbd> List skills</div>
+    <div class="shortcut" data-cmd="/models"><kbd>/models</kbd> List models</div>
+  </div>
+</aside>
+
+<!-- ── Main Area ── -->
+<div class="main">
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <button class="hamburger" aria-label="Menu">☰</button>
+    <span class="dot ready" id="status-dot"></span>
+    <span class="title">ATA Coder</span>
+    <span class="subtitle" id="top-subtitle"></span>
+  </div>
+
+  <!-- Chat -->
+  <div class="chat" id="chat">
+    <div class="msg status">⚡ ATA Coder — AI-powered coding assistant</div>
+    <div class="msg status" id="init-info">Connecting…</div>
+  </div>
+
+  <!-- Command Popup -->
+  <div class="cmd-popup" id="cmd-popup"></div>
+
+  <!-- Input Row -->
+  <div class="input-row" id="input-row">
+    <input type="text" id="cmd-input" placeholder="Ask anything… / for commands"
+           autocomplete="off" autocapitalize="off" spellcheck="false">
+    <button id="send-btn">Send</button>
+    <button id="stop-btn">Stop</button>
+  </div>
+
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <span id="st-tokens">tokens: ~0</span>
+    <span id="st-skill">skill: general-coder</span>
+    <span id="st-model">model: …</span>
+    <span id="st-time" style="margin-left:auto">0.0s</span>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

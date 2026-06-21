@@ -1,0 +1,63 @@
+# Full code review pipeline — lint → review → optional auto-fix
+name: code-review-pipeline
+description: >
+  Run linter, perform multi-dimension code review,
+  and optionally auto-fix issues.  Designed for pre-commit
+  or PR workflows.
+
+vars:
+  severity_threshold: medium
+  auto_fix: false
+
+steps:
+  # ── Phase 1: Lint ───────────────────────────────────────────────────
+  - id: lint
+    run: ruff check . --output-format concise 2>&1 || true
+    description: Run ruff linter (errors only, non-blocking)
+
+  # ── Phase 2: Multi-dimension review ─────────────────────────────────
+  - id: review
+    depends_on: [lint]
+    parallel:
+      - id: review-bugs
+        agent: >
+          Review the current git diff for LOGIC BUGS and CORRECTNESS issues:
+          off-by-one errors, null handling, incorrect conditions, missing edge cases,
+          race conditions.  Be specific — cite files and lines.
+          If no bugs found, say "No bugs found."
+
+      - id: review-security
+        agent: >
+          Review the current git diff for SECURITY VULNERABILITIES:
+          injection risks, path traversal, exposed secrets, missing auth checks,
+          unsafe deserialization, command injection.
+          If no vulnerabilities found, say "No security issues found."
+
+      - id: review-performance
+        agent: >
+          Review the current git diff for PERFORMANCE issues:
+          O(n²) algorithms, unnecessary allocations, missing caching,
+          N+1 queries, blocking I/O on event loop.
+          If no performance issues found, say "No performance issues found."
+
+  # ── Phase 3: Summarize findings ─────────────────────────────────────
+  - id: summarize
+    depends_on: [review]
+    agent: >
+      Read the review results above and produce a concise summary report:
+      ## Code Review Summary
+      ### Critical / High
+      (list critical and high severity findings with file:line)
+      ### Medium / Low
+      (list lower severity findings)
+      ### Recommendation
+      (overall verdict: approve / changes requested / needs discussion)
+
+  # ── Phase 4: Auto-fix (conditional) ─────────────────────────────────
+  - id: fix
+    depends_on: [summarize]
+    condition: "vars.auto_fix == true"
+    agent: >
+      Apply fixes for all medium and above severity issues found in the review.
+      Apply each fix directly to the affected file.  Be minimal — only fix
+      the specific issue, do not refactor or restyle.

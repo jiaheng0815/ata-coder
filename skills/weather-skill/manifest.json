@@ -1,0 +1,48 @@
+{
+  "name": "weather-skill",
+  "version": "1.0.0",
+  "description": "Query weather information for cities worldwide via Open-Meteo API",
+  "type": "skill",
+  "author": "ATA Coder Team",
+  "license": "MIT",
+  "call": {
+    "function": "get_weather",
+    "parameters": {
+      "city": {
+        "type": "string",
+        "description": "City name (e.g., 'Beijing', 'Tokyo', 'London')",
+        "required": true
+      },
+      "units": {
+        "type": "string",
+        "description": "Temperature unit: 'celsius' or 'fahrenheit'",
+        "default": "celsius"
+      },
+      "forecast_days": {
+        "type": "integer",
+        "description": "Number of forecast days (1-7)",
+        "default": 1
+      }
+    }
+  },
+  "output": {
+    "format": "json",
+    "schema": {
+      "city": "string",
+      "country": "string",
+      "temperature": "number",
+      "humidity": "number",
+      "conditions": "string",
+      "forecast": "array"
+    }
+  },
+  "permissions": {
+    "network": true,
+    "filesystem": "read_only",
+    "allowed_domains": ["api.open-meteo.com", "geocoding-api.open-meteo.com"],
+    "allowed_commands": []
+  },
+  "triggers": ["weather", "temperature", "forecast", "天气", "气温", "预报"],
+  "tags": ["weather", "utility", "api"],
+  "dependencies": []
+}
