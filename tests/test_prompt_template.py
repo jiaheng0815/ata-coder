@@ -207,7 +207,8 @@ class TestTemplateManager:
         self._tmp_dir = tempfile.mkdtemp(prefix="ata_test_prompts_")
 
     def teardown_method(self):
-        import shutil, os
+        import os
+        import shutil
         if os.path.exists(self._tmp_dir):
             shutil.rmtree(self._tmp_dir, ignore_errors=True)
 

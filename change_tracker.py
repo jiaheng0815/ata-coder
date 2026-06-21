@@ -81,12 +81,11 @@ class FileChange:
         status = "[REVERTED]" if self.reverted else ""
         if self.change_type == ChangeType.WRITE:
             return f"#{self.id} CREATE {self.file_path} {status}"
-        elif self.change_type == ChangeType.EDIT:
+        if self.change_type == ChangeType.EDIT:
             old_lines = (self.old_content or "").count("\n") + 1 if self.old_content else 0
             new_lines = (self.new_content or "").count("\n") + 1 if self.new_content else 0
             return f"#{self.id} EDIT   {self.file_path} ({old_lines}→{new_lines} lines) {status}"
-        else:
-            return f"#{self.id} DELETE {self.file_path} {status}"
+        return f"#{self.id} DELETE {self.file_path} {status}"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

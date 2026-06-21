@@ -22,11 +22,7 @@ Provides a set of tools the agent can use:
 
 import asyncio
 import logging
-import os
-import re
-import shlex
 import shutil
-import fnmatch
 from pathlib import Path
 from typing import Any, Callable
 

@@ -735,7 +735,9 @@ def ipc_cmd(ctx, workspace):
     """Internal: JSON-RPC IPC adapter for TypeScript companion server.
     Reads JSON requests from stdin, writes JSON responses to stdout.
     Never exits unless stdin closes or 'shutdown' op is received."""
-    import json as _json, sys as _sys, asyncio as _asyncio
+    import json as _json
+    import sys as _sys
+    import asyncio as _asyncio
     from pathlib import Path as _Path
     from .config import get_config as _get_config
     from .agent import CoderAgent
@@ -748,7 +750,8 @@ def ipc_cmd(ctx, workspace):
             config.agent.workspace_dir = str(_Path(workspace).resolve())
         # Suppress config validation output — _ipc uses stdout for JSON-RPC,
         # and click.echo() would corrupt the protocol.
-        import contextlib, io as _io
+        import contextlib
+        import io as _io
         _stderr_buf = _io.StringIO()
         with contextlib.redirect_stderr(_stderr_buf):
             _setup(config, {})
