@@ -47,7 +47,7 @@ if sys.platform == 'win32':
             _patched_init.__ata_patched__ = True
             _sp.Popen.__init__ = _patched_init
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 import asyncio
 import logging

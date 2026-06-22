@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ata-coder"
-version = "1.0.0"
+version = "1.0.1"
 description = "ATA Coder — CLI AI coding assistant for OpenAI & Anthropic APIs"
 readme = "README.md"
 requires-python = ">=3.10"
