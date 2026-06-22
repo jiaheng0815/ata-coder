@@ -328,13 +328,16 @@ class GitWorkflow:
         if not diff:
             return None
 
-        # Patterns that look like secrets
+        # Patterns that look like secrets — specific before generic.
+        # The generic API key/key=value pattern MUST be last, otherwise it
+        # captures GitHub tokens, OpenAI keys, and AWS keys before their
+        # more specific patterns ever get a chance to match.
         secret_patterns = [
-            (r"(?:api_key|apikey|secret|password|token)\s*[:=]\s*[\"'`][^\s\"'`]{20,}[\"'`]", "API key / secret"),
-            (r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----", "Private key"),
             (r"(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}", "GitHub token"),
+            (r"sk-[A-Za-z0-9\-_]{32,}", "OpenAI API key"),
             (r"AKIA[0-9A-Z]{16}", "AWS access key"),
-            (r"sk-[A-Za-z0-9]{32,}", "OpenAI API key"),
+            (r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----", "Private key"),
+            (r"(?:api_key|apikey|secret|password|token)\s*[:=]\s*[\"'`][^\s\"'`]{20,}[\"'`]", "API key / secret"),
         ]
 
         for pattern, name in secret_patterns:
