@@ -45,7 +45,7 @@ def register_commands(r: Any) -> None:
     def cmd_effort(arg: str, ctx: dict) -> bool:
         valid = {"low", "medium", "high", "xhigh", "max"}
         if not arg or arg.lower() not in valid:
-            current = getattr(ctx.get("config", None), "effort", "medium")
+            current = getattr(ctx.get("config"), "effort", "medium")
             print(f"Effort: {current}  (low / medium / high / xhigh / max)")
             print("  low    = haiku, 4K tokens, thinking disabled")
             print("  medium = default, 16K tokens, no thinking")

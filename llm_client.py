@@ -7,7 +7,6 @@ Supports any provider that implements the OpenAI chat completions API format.
 import asyncio
 import json
 import logging
-import random
 from typing import Any, AsyncIterator, Callable
 
 import httpx
@@ -465,11 +464,10 @@ class LLMClient(BaseLLMClient):
                     )
                     await asyncio.sleep(delay)
                     continue
-                else:
-                    raise RuntimeError(
-                        f"Rate limit exceeded after {self._max_retries} retries. "
-                        f"Wait and try again."
-                    )
+                raise RuntimeError(
+                    f"Rate limit exceeded after {self._max_retries} retries. "
+                    f"Wait and try again."
+                )
 
             if response.status_code >= 500:
                 last_error = f"HTTP {response.status_code} (server error)"

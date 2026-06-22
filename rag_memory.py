@@ -27,9 +27,8 @@ import logging
 import os
 import re
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -202,10 +201,9 @@ class RAGIndex:
 
         if ext == ".py":
             return self._chunk_python(rel_path, lines)
-        elif ext in (".md", ".rst", ".txt"):
+        if ext in (".md", ".rst", ".txt"):
             return self._chunk_markdown(rel_path, lines)
-        else:
-            return self._chunk_generic(rel_path, lines)
+        return self._chunk_generic(rel_path, lines)
 
     def _chunk_python(self, rel_path: str, lines: list[str]) -> list[Chunk]:
         """Chunk a Python file by functions and classes."""

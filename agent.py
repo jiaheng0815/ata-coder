@@ -804,8 +804,7 @@ class CoderAgent(CompactionMixin, ToolExecutionMixin,
         self.change_tracker.dry_run = enabled
         if enabled:
             return "DRY-RUN MODE ON — changes will be PREVIEWED only, not applied."
-        else:
-            return "DRY-RUN MODE OFF — changes will be applied normally."
+        return "DRY-RUN MODE OFF — changes will be applied normally."
 
     def _extract_system_prompt(self) -> str:
         """Return the system prompt from the current conversation state.

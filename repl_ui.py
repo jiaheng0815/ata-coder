@@ -392,10 +392,9 @@ class ClaudeCodeUI:
                         self._in_bold = True
                     i += 1
                     continue
-                else:
-                    # Lone * — not part of a ** pair
-                    sys.stdout.write('*')
-                    self._bold_buffer = ""
+                # Lone * — not part of a ** pair
+                sys.stdout.write('*')
+                self._bold_buffer = ""
                     # fall through to handle current ch
 
             # ── Normal character processing ────────────────────────
@@ -427,13 +426,11 @@ class ClaudeCodeUI:
                         self._in_bold = True
                     i += 2
                     continue
-                else:
-                    # Single * — buffer it, could continue in next chunk
-                    self._bold_buffer = '*'
-                    i += 1
-                    continue
-            else:
-                sys.stdout.write(ch)
+                # Single * — buffer it, could continue in next chunk
+                self._bold_buffer = '*'
+                i += 1
+                continue
+            sys.stdout.write(ch)
             i += 1
 
     def _detect_lang(self, fence_info: str) -> str:
@@ -626,7 +623,7 @@ class ClaudeCodeUI:
                     else:
                         self._code_buffer += text
                     break
-                elif close_idx == -2:
+                if close_idx == -2:
                     # Closing ``` at very start of chunk
                     self._flush_code_block()
                     self._in_code_block = False
@@ -941,8 +938,7 @@ class ClaudeCodeUI:
         """Interactive permission prompt with clear formatting."""
         if HAS_RICH:
             return self._rich_permission(tool_name, arguments, category)
-        else:
-            return self._simple_permission(tool_name, arguments, category)
+        return self._simple_permission(tool_name, arguments, category)
 
     def _rich_permission(self, tool_name, arguments, category) -> bool:
         cat_color = CATEGORY_COLORS.get(category, "yellow")
@@ -1010,18 +1006,17 @@ class ClaudeCodeUI:
                 return False
             if choice in ("y", "yes", ""):
                 return True
-            elif choice in ("n", "no"):
+            if choice in ("n", "no"):
                 return False
-            elif choice == "a":
+            if choice == "a":
                 if self._permission_callback:
                     self._permission_callback("allow_category", category)
                 return True
-            elif choice == "d":
+            if choice == "d":
                 if self._permission_callback:
                     self._permission_callback("deny_category", category)
                 return False
-            else:
-                self.console.print("[red]y/n/a/d[/red]")
+            self.console.print("[red]y/n/a/d[/red]")
 
     def _simple_permission(self, tool_name, arguments, category) -> bool:
         print(f"\n{Colors.YELLOW}[{category.upper()}] {tool_name}{Colors.RESET}")
@@ -1036,12 +1031,12 @@ class ClaudeCodeUI:
             except (KeyboardInterrupt, EOFError):
                 return False
             if choice in ("y", "yes", ""): return True
-            elif choice in ("n", "no"): return False
-            elif choice == "a":
+            if choice in ("n", "no"): return False
+            if choice == "a":
                 if self._permission_callback:
                     self._permission_callback("allow_category", category)
                 return True
-            elif choice == "d":
+            if choice == "d":
                 if self._permission_callback:
                     self._permission_callback("deny_category", category)
                 return False
@@ -1072,8 +1067,7 @@ class ClaudeCodeUI:
 
         if HAS_PROMPT_TOOLKIT:
             return await self._get_input_pt(dangerous)
-        else:
-            return self._get_input_fallback(dangerous)
+        return self._get_input_fallback(dangerous)
 
     async def _get_input_pt(self, dangerous: bool = False) -> str:
         """Read input via prompt_toolkit (async).

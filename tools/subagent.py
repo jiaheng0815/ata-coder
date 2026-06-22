@@ -84,12 +84,11 @@ class SubAgentToolsMixin:
                 result.result or "(empty)",
             ]
             return ToolResult(success=True, output="\n".join(lines))
-        else:
-            return ToolResult(
-                success=False,
-                output=f"Sub-agent {agent_id} failed: {result.error}",
-                error=result.error,
-            )
+        return ToolResult(
+            success=False,
+            output=f"Sub-agent {agent_id} failed: {result.error}",
+            error=result.error,
+        )
 
     async def _tool_list_subagents(self) -> ToolResult:
         """List all sub-agents and their statuses."""

@@ -127,10 +127,9 @@ async def test_chat_stream_retries_on_429():
         # Third attempt succeeds
         return FakeResponse(200, ["data: [DONE]"])
 
-    with patch.object(client._client, 'send', fake_send):
-        with patch.object(client._client, 'build_request',
-                          return_value=MagicMock()):
-            results = [chunk async for chunk in client.chat_stream([{"role": "user", "content": "hi"}])]
+    with patch.object(client._client, 'send', fake_send), patch.object(client._client, 'build_request',
+                      return_value=MagicMock()):
+        results = [chunk async for chunk in client.chat_stream([{"role": "user", "content": "hi"}])]
 
     assert call_count[0] == 3, f"Expected 3 attempts (2 retries + 1 success), got {call_count[0]}"
     assert len(results) == 0 or all(t in ("finish",) for t, _ in results)

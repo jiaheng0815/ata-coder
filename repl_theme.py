@@ -59,9 +59,7 @@ def render_diff_rich(console, old_text: str, new_text: str, file_path: str) -> N
     # Build a rich text with colored lines
     rich_text = Text()
     for line in diff_text.splitlines():
-        if line.startswith("---"):
-            rich_text.append(line + "\n", style="dim")
-        elif line.startswith("+++"):
+        if line.startswith("---") or line.startswith("+++"):
             rich_text.append(line + "\n", style="dim")
         elif line.startswith("@@"):
             rich_text.append(line + "\n", style="bold cyan")

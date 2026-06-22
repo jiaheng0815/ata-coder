@@ -44,15 +44,15 @@ def format_sse_data(evt_type: str, payload: Any) -> str | None:
     """
     if evt_type == "text":
         return json.dumps({"type": "text", "text": payload}, ensure_ascii=False)
-    elif evt_type == "tool_stream":
+    if evt_type == "tool_stream":
         return json.dumps({
             "type": "tool_stream",
             "tool": payload.get("tool", ""),
             "chunk": payload.get("chunk", ""),
         }, ensure_ascii=False)
-    elif evt_type == "thinking":
+    if evt_type == "thinking":
         return json.dumps({"type": "thinking", "text": payload}, ensure_ascii=False)
-    elif evt_type == "tool_call":
+    if evt_type == "tool_call":
         args = payload.get("arguments", {})
         args = sanitize_surrogates(args)
         return json.dumps({
@@ -61,16 +61,16 @@ def format_sse_data(evt_type: str, payload: Any) -> str | None:
             "args_summary": brief_args(args),
             "args": args,
         }, ensure_ascii=False)
-    elif evt_type == "tool_result":
+    if evt_type == "tool_result":
         return json.dumps({
             "type": "tool_result",
             "tool": payload["name"],
             "ok": payload["success"],
             "output": payload.get("output", ""),
         }, ensure_ascii=False)
-    elif evt_type == "error":
+    if evt_type == "error":
         return json.dumps({"type": "error", "error": payload.get("error", "")}, ensure_ascii=False)
-    elif evt_type == "complete":
+    if evt_type == "complete":
         return json.dumps({
             "type": "complete",
             "tools": payload["tool_calls"],
@@ -88,28 +88,28 @@ def sse_event_tuple(event: Any):
     if isinstance(event, TextDeltaEvent):
         logger.debug("\U0001f4e4 text: %s", sanitize_log(event.text[:120]))
         return ("text", event.text)
-    elif isinstance(event, ReasoningEvent):
+    if isinstance(event, ReasoningEvent):
         logger.debug("\U0001f9e0 thinking: %.100s", sanitize_log(event.text))
         return ("thinking", event.text[:200])
-    elif isinstance(event, ThinkingEvent):
+    if isinstance(event, ThinkingEvent):
         return None
-    elif isinstance(event, ToolStreamEvent):
+    if isinstance(event, ToolStreamEvent):
         # Real-time shell output — stream immediately to frontend
         return ("tool_stream", {"tool": event.tool_name, "chunk": event.chunk})
-    elif isinstance(event, ToolCallEvent):
+    if isinstance(event, ToolCallEvent):
         logger.debug("\U0001f527 %s %s", event.tool_name, brief_args(event.arguments))
         return ("tool_call", {"name": event.tool_name, "arguments": event.arguments, "source": event.source})
-    elif isinstance(event, ToolResultEvent):
+    if isinstance(event, ToolResultEvent):
         if event.result.success:
             logger.debug("  ✅ %s", sanitize_log((event.result.output or "")[:100].replace("\n"," ")))
         else:
             logger.debug("  ❌ %s", sanitize_log((event.result.error or "?")[:100]))
         return ("tool_result", {"name": event.tool_name, "success": event.result.success,
                                 "output": (event.result.output or "")[:4000], "error": event.result.error})
-    elif isinstance(event, ErrorEvent):
+    if isinstance(event, ErrorEvent):
         logger.info("\U0001f4a5 ERROR: %s", sanitize_log(event.error))
         return ("error", {"error": event.error})
-    elif isinstance(event, CompleteEvent):
+    if isinstance(event, CompleteEvent):
         logger.info("\U0001f3c1 Complete — %d tools, %.1fs", event.total_tool_calls, event.total_time)
         return ("complete", {"tool_calls": event.total_tool_calls, "time": event.total_time})
     return None

@@ -215,28 +215,27 @@ class FoolProofEngine:
     def _run_safety_check(self, tool_name: str, arguments: dict) -> SafetyCheck:
         if tool_name == "read_file":
             return self.guard.check_read_file(arguments.get("file_path", ""))
-        elif tool_name == "write_file":
+        if tool_name == "write_file":
             return self.guard.check_write_file(
                 arguments.get("file_path", ""),
                 arguments.get("content", ""),
             )
-        elif tool_name == "edit_file":
+        if tool_name == "edit_file":
             return self.guard.check_edit_file(
                 arguments.get("file_path", ""),
                 arguments.get("old_string", ""),
                 arguments.get("new_string", ""),
             )
-        elif tool_name == "run_shell":
+        if tool_name == "run_shell":
             return self.guard.check_shell(arguments.get("command", ""))
-        elif tool_name.startswith("mcp__"):
+        if tool_name.startswith("mcp__"):
             return SafetyCheck(allowed=True, risk=RiskLevel.CAUTION,
                              warnings=["MCP tool — verify on server side"])
-        else:
-            # Unknown tool — be conservative, not permissive.
-            # Defaulting to SAFE would silently skip safety checks for any
-            # newly-added tool that wasn't wired into this dispatch.
-            return SafetyCheck(allowed=True, risk=RiskLevel.CAUTION,
-                             warnings=[f"Unknown tool type: {tool_name} — no safety rules defined"])
+        # Unknown tool — be conservative, not permissive.
+        # Defaulting to SAFE would silently skip safety checks for any
+        # newly-added tool that wasn't wired into this dispatch.
+        return SafetyCheck(allowed=True, risk=RiskLevel.CAUTION,
+                         warnings=[f"Unknown tool type: {tool_name} — no safety rules defined"])
 
     # ── Message formatting ───────────────────────────────────────────────
 
@@ -269,12 +268,12 @@ class FoolProofEngine:
             content = arguments.get("content", "")
             lines = content.count("\n") + 1
             return f"Would WRITE {fp} ({lines} lines, {len(content)} bytes)"
-        elif tool_name == "edit_file":
+        if tool_name == "edit_file":
             fp = arguments.get("file_path", "")
             old = arguments.get("old_string", "")
             new = arguments.get("new_string", "")
             return f"Would EDIT {fp}:\n  - {old[:80]}\n  + {new[:80]}"
-        elif tool_name == "run_shell":
+        if tool_name == "run_shell":
             return f"Would RUN: {arguments.get('command', '')[:200]}"
         return ""
 

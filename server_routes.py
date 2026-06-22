@@ -529,7 +529,7 @@ class ServerRoutesMixin:
                             await agent_task
                         except _asyncio.CancelledError:
                             pass
-                        return
+                        return None
 
             # Drain remaining events
             while not events.empty():

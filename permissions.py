@@ -61,7 +61,7 @@ class PermissionMode(Enum):
         """Human-readable label for this permission mode."""
         if self == PermissionMode.ALLOW:
             return "✅ ALLOW"
-        elif self == PermissionMode.DENY:
+        if self == PermissionMode.DENY:
             return "🚫 DENY"
         return "❓ ASK"
 
@@ -78,11 +78,11 @@ def tool_category(tool_name: str) -> str:
     """Get the category of a tool."""
     if tool_name in READ_TOOLS:
         return "read"
-    elif tool_name in WRITE_TOOLS:
+    if tool_name in WRITE_TOOLS:
         return "write"
-    elif tool_name in SHELL_TOOLS:
+    if tool_name in SHELL_TOOLS:
         return "shell"
-    elif tool_name.startswith("mcp__"):
+    if tool_name.startswith("mcp__"):
         return "mcp"
     return "other"
 
@@ -171,7 +171,7 @@ class PermissionStore:
             mode = self._rules[tool_name]
             if mode == PermissionMode.ALLOW:
                 return True
-            elif mode == PermissionMode.DENY:
+            if mode == PermissionMode.DENY:
                 logger.info("Denied by rule: %s", tool_name)
                 return False
 
@@ -180,7 +180,7 @@ class PermissionStore:
             mode = self._category_rules[category]
             if mode == PermissionMode.ALLOW:
                 return True
-            elif mode == PermissionMode.DENY:
+            if mode == PermissionMode.DENY:
                 logger.info("Denied by category rule: %s", category)
                 return False
 
@@ -189,7 +189,7 @@ class PermissionStore:
             mode = self._rules["*"]
             if mode == PermissionMode.ALLOW:
                 return True
-            elif mode == PermissionMode.DENY:
+            if mode == PermissionMode.DENY:
                 logger.info("Denied by wildcard rule")
                 return False
 

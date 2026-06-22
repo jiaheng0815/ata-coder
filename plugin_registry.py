@@ -514,9 +514,8 @@ class PluginRegistry:
                 )
                 logger.info("Plugin installed: %s", meta.name)
                 return True, msg
-            else:
-                error = result.stderr.strip().split("\n")[-1] if result.stderr else "Unknown error"
-                return False, f"pip install failed: {error}"
+            error = result.stderr.strip().split("\n")[-1] if result.stderr else "Unknown error"
+            return False, f"pip install failed: {error}"
         except subprocess.TimeoutExpired:
             return False, "Installation timed out after 120s."
         except Exception as e:
@@ -611,14 +610,13 @@ class PluginRegistry:
         """Human-readable age of the cached index."""
         if not self._index_path.exists():
             return "never cached"
-        import time
         mtime = self._index_path.stat().st_mtime
         ago = time.time() - mtime
         if ago < 60:
             return f"{int(ago)}s ago"
-        elif ago < 3600:
+        if ago < 3600:
             return f"{int(ago / 60)}m ago"
-        elif ago < 86400:
+        if ago < 86400:
             return f"{int(ago / 3600)}h ago"
         return f"{int(ago / 86400)}d ago"
 

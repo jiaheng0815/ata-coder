@@ -422,10 +422,9 @@ class Skill:
             try:
                 if fp.suffix in (".json",):
                     return json.loads(fp.read_text(encoding="utf-8"))
-                elif fp.suffix in (".yaml", ".yml") and HAS_YAML:
+                if fp.suffix in (".yaml", ".yml") and HAS_YAML:
                     return yaml.safe_load(fp.read_text(encoding="utf-8"))
-                else:
-                    return fp.read_text(encoding="utf-8")
+                return fp.read_text(encoding="utf-8")
             except Exception:
                 logger.warning("Failed to read resource %s", fp)
         return None

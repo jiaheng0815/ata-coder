@@ -95,10 +95,9 @@ def _get_platform_tag() -> str:
     system = platform.system()
     if system == "Windows":
         return "windows"
-    elif system == "Darwin":
+    if system == "Darwin":
         return "macos"
-    else:
-        return "linux"
+    return "linux"
 
 
 def _truncate_tool_input(args: dict) -> dict:
@@ -425,12 +424,11 @@ class ClawdIntegration:
             if behavior == "allow":
                 logger.info("Clawd permission: ALLOW %s", tool_name)
                 return "allow"
-            elif behavior == "deny":
+            if behavior == "deny":
                 logger.info("Clawd permission: DENY %s", tool_name)
                 return "deny"
-            else:
-                logger.warning("Clawd permission: unknown behavior=%r", behavior)
-                return None
+            logger.warning("Clawd permission: unknown behavior=%r", behavior)
+            return None
 
         except urllib_error.URLError as e:
             logger.debug("Clawd permission unavailable: %s", e)

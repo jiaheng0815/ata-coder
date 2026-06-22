@@ -312,7 +312,7 @@ class WorkflowRunner:
             # Unknown step type
             self._results[step_id] = StepResult(
                 step_id=step_id, success=False,
-                error=f"No 'tool', 'agent', 'run', or 'parallel' key in step",
+                error="No 'tool', 'agent', 'run', or 'parallel' key in step",
             )
 
         except Exception as e:
@@ -392,9 +392,9 @@ class WorkflowRunner:
                     return str(self._results[ref].output)
                 return match.group(0)
             return re.sub(r'\$\{\{\s*([^}]+)\s*\}\}', _replace, value)
-        elif isinstance(value, dict):
+        if isinstance(value, dict):
             return {k: self._resolve_vars(v) for k, v in value.items()}
-        elif isinstance(value, list):
+        if isinstance(value, list):
             return [self._resolve_vars(v) for v in value]
         return value
 

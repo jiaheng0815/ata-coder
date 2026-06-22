@@ -45,9 +45,9 @@ def detect_os() -> OSFamily:
     system = platform.system().lower()
     if system == "windows":
         return OSFamily.WINDOWS
-    elif system == "darwin":
+    if system == "darwin":
         return OSFamily.MACOS
-    elif system == "linux":
+    if system == "linux":
         return OSFamily.LINUX
     return OSFamily.UNKNOWN
 
@@ -127,11 +127,11 @@ def get_elevation_prefix() -> str | None:
             pass
         return None
 
-    elif os_family == OSFamily.MACOS:
+    if os_family == OSFamily.MACOS:
         # macOS: osascript can be used for admin privileges
         return "osascript"
 
-    elif os_family == OSFamily.WINDOWS:
+    if os_family == OSFamily.WINDOWS:
         # Windows: PowerShell Start-Process -Verb RunAs for elevation
         return "powershell"
 
@@ -162,7 +162,7 @@ def wrap_privileged_command(command: str) -> str:
         # Absolute fallback
         return f"sudo -- {shlex.quote(command)}"
 
-    elif os_family == OSFamily.MACOS:
+    if os_family == OSFamily.MACOS:
         # osascript: double-quote the command, shlex.quote for inner safety
         return (
             "osascript -e "
@@ -170,7 +170,7 @@ def wrap_privileged_command(command: str) -> str:
                           ' with administrator privileges')
         )
 
-    elif os_family == OSFamily.WINDOWS:
+    if os_family == OSFamily.WINDOWS:
         # Encode the entire command as a single base64 PowerShell script to
         # avoid nested-quoting injection through cmd.exe.  The script is
         # executed directly by PowerShell without going through cmd.exe at all,
@@ -452,14 +452,14 @@ class PrivilegeManager:
                 "  2. Or: Start-Process -Verb RunAs python main.py\n"
                 "  3. Confirm the UAC prompt"
             )
-        elif os_family == OSFamily.MACOS:
+        if os_family == OSFamily.MACOS:
             return (
                 "To gain admin privileges on macOS:\n"
                 "  1. Prefix commands with 'sudo'\n"
                 "  2. The system will prompt for your password / Touch ID\n"
                 "  3. Or run the agent with: sudo python main.py"
             )
-        elif os_family == OSFamily.LINUX:
+        if os_family == OSFamily.LINUX:
             return (
                 "To gain admin privileges on Linux:\n"
                 "  1. Prefix commands with 'sudo'\n"

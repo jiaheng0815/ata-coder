@@ -125,13 +125,13 @@ class ProjectInfo:
         # Running commands (test, build, lint) — most useful for the LLM
         commands = []
         if "pytest" in self.test_frameworks:
-            commands.append(f"Test: `pytest tests/ -q`")
+            commands.append("Test: `pytest tests/ -q`")
         if "jest" in self.test_frameworks:
-            commands.append(f"Test: `npm test`")
+            commands.append("Test: `npm test`")
         if "npm" in self.build_systems:
-            commands.append(f"Build: `npm run build`")
+            commands.append("Build: `npm run build`")
         if "pip" in self.build_systems or "poetry" in self.build_systems:
-            commands.append(f"Install: `pip install -e .`")
+            commands.append("Install: `pip install -e .`")
         if commands:
             lines.append("**Commands:** " + "  ".join(commands))
 

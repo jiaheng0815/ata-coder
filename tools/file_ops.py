@@ -16,7 +16,6 @@ combined with ``ToolExecutor``.
 
 import logging
 import time as _time
-from pathlib import Path
 from typing import Any
 
 from .result import ToolResult

@@ -34,12 +34,9 @@ Usage:
 import json
 import logging
 import os
-import queue
 import secrets
-import shlex
 import sys
 import threading
-import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 
@@ -115,12 +112,9 @@ if _pkg not in sys.path:
 from .config import AppConfig, get_config
 from .tools import TOOL_DEFINITIONS
 from .server_session import SessionStore
-from .server_shell import shell_open, shell_ensure, shell_close, shell_close_all, get_shell_sessions
-from .server_sse import sanitize_log, format_sse_data, sse_event_tuple
+from .server_shell import shell_close_all
 from .server_routes import ServerRoutesMixin
 from .server_rate_limit import RateLimiter
-from .skills import get_skill_manager
-from .utils import brief_args
 
 logger = logging.getLogger(__name__)
 
