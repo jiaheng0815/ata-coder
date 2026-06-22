@@ -344,9 +344,8 @@ async def run_interactive_async(config: AppConfig, **kwargs):
             user_input = await ui.get_input(session_info, dangerous=dangerous)
         except (KeyboardInterrupt, EOFError):
             sid = getattr(agent_ref, "_current_session_id", "") if agent_ref else ""
-            hash_suffix = sid.rsplit("-", 1)[-1] if "-" in sid else sid
-            if hash_suffix and len(hash_suffix) >= 6:
-                print(f"\nResume this session with:\n  ata --resume {hash_suffix}")
+            if sid:
+                print(f"\nResume this session with:\n  ata --resume {sid}")
             else:
                 print("\nGoodbye!")
             break

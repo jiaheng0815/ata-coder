@@ -20,11 +20,9 @@ def register_commands(r: Any) -> None:
     def cmd_quit(arg: str, ctx: dict) -> bool:
         agent = ctx.get("agent")
         sid = getattr(agent, "_current_session_id", "") if agent else ""
-        if sid and "-" in sid:
-            parts = sid.split("-")
-            if len(parts) >= 2:
-                print(f"\nResume this session with:\n  ata --resume {parts[-1]}")
-                return False
+        if sid:
+            print(f"\nResume this session with:\n  ata --resume {sid}")
+            return False
         print("Goodbye!")
         return False
 
