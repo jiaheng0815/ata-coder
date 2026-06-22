@@ -161,10 +161,15 @@ class AgentController:
             """Run the agent task with proper error handling."""
             try:
                 logger.info("Agent starting task: %.80s", task)
+                # When messages already exist (from --resume), preserve them
+                # instead of wiping the conversation with reset_context=True.
+                existing_msgs = self._agent._state.messages if self._agent else []
+                has_history = len(existing_msgs) > 0
                 result = await self._agent.run(
                     task, stream=stream,
                     skill_name=skill_name,
                     explicit_model=explicit_model,
+                    reset_context=not has_history,
                 )
                 logger.info("Agent completed task (len=%d)", len(result))
             except asyncio.CancelledError:
