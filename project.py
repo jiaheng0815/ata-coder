@@ -156,8 +156,11 @@ class ProjectInfo:
     def _summarise_rules(self) -> str:
         """Extract the most important rules from a project instructions file.
 
-        Returns the first ~2000 chars of non-YAML-frontmatter content,
-        which covers the key rules without eating too many tokens.
+        Strips YAML frontmatter and the persona/identity intro (everything
+        before the first ``## `` heading) so the LLM receives *instructions
+        to follow*, not a *personality to impersonate*.
+
+        Returns the first ~2000 chars of rule content.
         """
         if not self.project_rules_content:
             return ""
@@ -166,6 +169,12 @@ class ProjectInfo:
         if content.startswith("---"):
             parts = content.split("---", 2)
             content = parts[-1] if len(parts) >= 3 else content
+        # Strip persona intro — keep only the rule sections (## headings).
+        # CLAUDE.md files often begin with a friendly first-person intro
+        # that must NOT become the LLM's identity.
+        heading_match = __import__('re').search(r'^##\s', content, __import__('re').MULTILINE)
+        if heading_match:
+            content = content[heading_match.start():]
         # Take first 2000 chars — enough for rules, not whole file
         if len(content) > 2000:
             content = content[:2000] + "\n... (truncated)"
