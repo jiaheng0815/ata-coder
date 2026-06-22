@@ -320,6 +320,9 @@ async def run_interactive_async(config: AppConfig, **kwargs):
 
     if resume_messages and controller.agent:
         controller.agent._state.messages = resume_messages
+        # Sync the context manager so token tracking, compaction decisions,
+        # and force-truncation all see the resumed history.
+        controller.agent._context_manager.replace_all(resume_messages)
         # Reuse the resumed session ID so auto-save updates the same session
         controller.agent._current_session_id = resume_id
 
