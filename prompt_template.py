@@ -240,7 +240,6 @@ class PromptTemplate:
         import re as _re
 
         if_tag = _re.compile(r'\{\{\%\s*if\s+(.+?)\s*\%\}\}')
-        endif_tag = _re.compile(r'\{\{\%\s*endif\s*\%\}\}')
         any_tag = _re.compile(r'\{\{\%\s*(?:if\s+.+?|endif)\s*\%\}\}')
 
         def _eval_condition(cond: str) -> bool:

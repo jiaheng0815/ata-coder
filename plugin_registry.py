@@ -256,7 +256,6 @@ class PluginRegistry:
                 try:
                     info = self._fetch_pypi_package_info(pkg_name)
                     if info:
-                        name = info.get("name", pkg_name)
                         plugin_name = self._pkg_to_plugin_name(pkg_name)
                         plugins[plugin_name] = PluginMeta(
                             name=plugin_name,

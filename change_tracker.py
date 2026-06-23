@@ -262,7 +262,9 @@ class ChangeTracker:
             elif path.exists():
                 path.write_text(c.old_content, encoding="utf-8", errors="replace")
         elif c.change_type == ChangeType.EDIT:
-            if path.exists() and c.old_content is not None:
+            if c.old_content is not None:
+                # Recreate parent dirs if the file was deleted externally
+                path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(c.old_content, encoding="utf-8", errors="replace")
         elif c.change_type == ChangeType.DELETE:
             if c.new_content is not None:
