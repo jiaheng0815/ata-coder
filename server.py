@@ -381,9 +381,6 @@ class AgentAPIHandler(ServerRoutesMixin, RateLimiter, BaseHTTPRequestHandler):
     # → ServerRoutesMixin (server_routes.py)
 
     # _handle_chat_stream → ServerRoutesMixin (server_routes.py)
-    # _sse_event_tuple → server_sse.sse_event_tuple
-
-# format_sse_data → server_sse.format_sse_data
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Server factory

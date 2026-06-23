@@ -163,7 +163,8 @@ class CoderAgent(CompactionMixin, ToolExecutionMixin,
             mcp_tools = self.mcp.get_tools()
             self._all_tools.extend(mcp_tools)
             logger.debug(
-                "MCP tools added: %d", len(mcp_tools),
+                "MCP tools (before connect): %d — servers connect in run()",
+                len(mcp_tools),
             )
 
         # Extension tools

@@ -129,7 +129,7 @@ class CompactionMixin:
             return None
         try:
             compressor = get_compressor()
-            if not compressor.available:
+            if compressor is None or not compressor.available:
                 return None
 
             # Build structured text for the compressor to preserve
