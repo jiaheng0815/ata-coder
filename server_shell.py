@@ -126,7 +126,8 @@ def shell_ensure(sid: str, cwd: str, token_hash: str = ""):
         with _shell_lock:
             if sid in _shell_sessions:
                 entry = _shell_sessions[sid]
-                return (*entry, "")
+                proc, outq, lock, prompt, _ = entry
+                return (proc, outq, lock, prompt, "")
         if sid not in _restarting:
             break  # restart done (or never started) — create below
         _time.sleep(0.05)
@@ -138,7 +139,8 @@ def shell_ensure(sid: str, cwd: str, token_hash: str = ""):
         _restarting.discard(sid)
         entry = _shell_sessions.get(sid)
         if entry:
-            return (*entry, "")
+            proc, outq, lock, prompt, _ = entry
+            return (proc, outq, lock, prompt, "")
         return (None, None, None, "", "")
 
 
