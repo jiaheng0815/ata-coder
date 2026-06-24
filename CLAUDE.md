@@ -212,7 +212,8 @@ ata_coder/
 ├── agent.py                 # 核心 agent: 异步 run loop, 事件系统, session 持久化
 ├── agent_tools.py           # ToolExecutionMixin — 工具调度、流式输出、自纠正
 ├── agent_compact.py         # CompactionMixin — LLM 摘要 + 强制截断
-├── agent_routing.py         # ModelRoutingMixin — 关键字+长度任务分类
+├── agent_routing.py         # ModelRoutingMixin — 评分制复杂度分类 (≥3分=complex, ≤-2分=simple)
+├── self_correct.py          # SelfCorrectionEngine — 14 错误诊断模式 + auto_correct 循环 (max 3 重试)
 ├── agent_extension.py       # ExtensionMixin — 扩展注册 + 生命周期
 ├── agent_controller.py      # asyncio.Task 编排器
 ├── agent_subsystems.py      # AgentSubsystems dataclass
@@ -246,6 +247,8 @@ ata_coder/
 ├── token_counter.py         # 统一 token 估算（模型感知、缓存）
 ├── system_prompt_builder.py # 动态 prompt 组装
 ├── model_registry.py        # 模型元数据 + 定价
+├── model_router.py          # ModelRouter — shortcut classify + model resolution
+├── codebase_index.py        # CodebaseIndex — AST 级 Python 符号索引 (零依赖)
 ├── repl_ui.py               # Rich/prompt-toolkit REPL + diff 预览
 ├── server.py                # HTTP API 服务器 + SSE 流
 ├── server_session.py        # 多 session 管理 SessionStore
@@ -377,6 +380,13 @@ VISION_MODEL / VISION_API_BASE / VISION_API_KEY  # Vision 覆盖
 - **Web search backends**：`ATA_CODER_SEARCH_BACKEND` 白名单 `{bing, baidu, google, duckduckgo}`，未知值记录日志后忽略。
 - **LLM client unified pattern**：两个客户端使用相同签名 — 始终传 `system_prompt=`。不根据 `self._use_anthropic` 分支 chat 调用。
 - **Release rule**：每次版本号变更必须完整发布（build、GitHub release、PyPI upload），缺一不可。PyPI token 通过 `$PYPI_TOKEN` 环境变量读取，绝不硬编码。
+- **Self-correction**：`self_correct.py` 含 14 个错误诊断模式（`ERROR_PATTERNS`），`_MAX_SELF_CORRECT_DEPTH=3`（`agent_tools.py`）。`read_first` 策略自动读取父目录获取上下文。`auto_correct()` 完整循环内置 session 学习机制。
+- **Model routing scored**：`agent_routing.py` `_ai_classify()` 用评分制替代二元关键词：正面信号（多步骤 +3、代码引用 +2、错误语言 +2、创建动词 +2）vs 负面信号（纯问题 -2、小范围 -1）。`ModelRouter`（`model_router.py`）为中间距离任务提供快捷分类。
+- **File I/O async**：`tools/file_ops.py` 中所有 `open().read()`/`write()` 通过 `asyncio.to_thread()` + `_read_file_sync`/`_write_file_sync` 辅助函数执行。Shell 执行和 web 工具已原生异步。
+- **Extractive fallback preserved**：`context_manager.py` `extract_important_snippets()` 从归档消息中提取错误（300 字符截断）、代码块、用户指令和截断输出。LLM 摘要不可用时保护关键上下文。
+- **Server metrics**：`server.py` 支持类级别指标追踪（`_request_count`、`_error_count`、`_total_latency_ms`）。`GET /metrics` 端点返回按路径统计的 JSON 格式指标。`_json_response` 自动记录所有响应。
+- **Codebase index**：`codebase_index.py` 提供零依赖 AST 级 Python 符号索引。使用 `CodebaseIndex(root).build()` 扫描 `.py` 文件，用 `.search("prefix")` 按名称查找，用 `.find_definition("ClassName")` 精确匹配。在 ≤100ms 内索引 500 个文件。
+- **Skill handlers**：`skills/<name>/handler.py` 文件提供预处理逻辑（项目类型检测、文件路径提取、git 上下文、bug 模式扫描）。通过 `SkillManager.execute_skill()` 可调用。
 
 ---
 
