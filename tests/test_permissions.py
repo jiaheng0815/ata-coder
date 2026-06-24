@@ -193,3 +193,35 @@ class TestPermissionRule:
         """PermissionRule should accept optional category."""
         rule = PermissionRule(tool_name="run_shell", mode=PermissionMode.ALLOW, category="shell")
         assert rule.category == "shell"
+
+
+class TestPermissionEdgeCases:
+    """Edge cases and boundary conditions for permission system."""
+
+    def test_deny_rule_blocks(self):
+        store = PermissionStore()
+        store.set_rule("write_file", PermissionMode.DENY)
+        assert not store.check("write_file", {"file_path": "/tmp/test"})
+
+    def test_allow_rule_passes(self):
+        store = PermissionStore()
+        store.set_rule("read_file", PermissionMode.ALLOW)
+        result = store.check("read_file", {"file_path": "/tmp/test"})
+        assert result  # default is ask-user, ALLOW should override
+
+    def test_empty_tool_name_safe(self):
+        cat = tool_category("")
+        assert cat in ("read", "other")  # unknown tools default safe
+
+    def test_read_tools_are_read_only(self):
+        for tool in READ_TOOLS:
+            assert tool_category(tool) == "read"
+
+    def test_write_tools_are_write(self):
+        for tool in WRITE_TOOLS:
+            assert tool_category(tool) == "write"
+
+    def test_tool_category_case_sensitivity(self):
+        """Tool names are case-sensitive — unknown name returns safe default."""
+        cat = tool_category("NONEXISTENT_TOOL")
+        assert cat in ("read", "other")

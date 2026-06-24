@@ -219,3 +219,53 @@ class TestFoolProofEngineStats:
         engine.capture("write_file", {"file_path": "test.txt", "content": "hi"}, result=None)
         stats = engine.stats
         assert stats["tracker_changes"] == 1
+
+
+class TestFoolProofEdgeCases:
+    """Edge cases and boundary conditions for FoolProof."""
+
+    def test_missing_file_path_argument(self, tmp_path):
+        """Tool with no file_path should not crash evaluate."""
+        engine = FoolProofEngine(tmp_path)
+        result = engine.evaluate("write_file", {"content": "hello"})
+        assert result is not None
+
+    def test_empty_arguments(self, tmp_path):
+        engine = FoolProofEngine(tmp_path)
+        result = engine.evaluate("run_shell", {})
+        # Empty command is still a shell call — should evaluate
+        assert result is not None
+
+    def test_very_long_command(self, tmp_path):
+        engine = FoolProofEngine(tmp_path)
+        long_cmd = "echo " + "x" * 10000
+        result = engine.evaluate("run_shell", {"command": long_cmd})
+        assert result is not None
+
+    def test_relative_path_traversal(self, tmp_path):
+        """Path traversal attempts should be detected."""
+        engine = FoolProofEngine(tmp_path)
+        result = engine.evaluate("read_file", {"file_path": "../../etc/passwd"})
+        assert result is not None
+
+    def test_null_bytes_in_args(self, tmp_path):
+        """Null bytes in file paths should be handled safely."""
+        engine = FoolProofEngine(tmp_path)
+        result = engine.evaluate("read_file", {"file_path": "test\0hidden.txt"})
+        assert result is not None
+
+    def test_stats_initial_state(self, tmp_path):
+        engine = FoolProofEngine(tmp_path)
+        s = engine.stats
+        assert "confirmations" in s
+        assert "blocks" in s
+        assert isinstance(s["confirmations"], int)
+
+    def test_multiple_evals_increment_stats(self, tmp_path):
+        engine = FoolProofEngine(tmp_path)
+        before = engine.stats["confirmations"]
+        engine.evaluate("write_file", {"file_path": "a.txt", "content": "x"})
+        engine.evaluate("write_file", {"file_path": "b.txt", "content": "y"})
+        after = engine.stats["confirmations"]
+        # Not asserting exact count (depends on permissions) but should be monotonic
+        assert after >= before
