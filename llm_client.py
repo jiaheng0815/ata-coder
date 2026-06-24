@@ -438,7 +438,7 @@ class LLMClient(BaseLLMClient):
                     f"Cannot reach {self._api_url} after {self._max_retries + 1} attempts.\n"
                     f"  Check your connection and the server URL.\n"
                     f"  Detail: {e}"
-                )
+                ) from e
             except httpx.RemoteProtocolError as e:
                 last_error = str(e)
                 if attempt < self._max_retries:
@@ -450,7 +450,7 @@ class LLMClient(BaseLLMClient):
                     "Server disconnected unexpectedly.\n"
                     "  The model may have timed out internally.\n"
                     "  Try again with a smaller task."
-                )
+                ) from e
 
             if response.status_code == 429:
                 last_error = "HTTP 429 (rate limited)"
@@ -492,7 +492,7 @@ class LLMClient(BaseLLMClient):
                     err_msg = str(e)
                 raise RuntimeError(
                     enhance_api_error(response.status_code, f"API error ({response.status_code}): {err_msg}", self.config.base_url)
-                )
+                ) from e
 
             return response.json()
 

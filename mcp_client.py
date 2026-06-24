@@ -213,7 +213,7 @@ class MCPServerConnection:
                 self._resources = result.get("resources", [])
                 logger.info("[%s] Discovered %d resources", self.name, len(self._resources))
             except Exception:
-                pass
+                logger.warning("[%s] Failed to discover resources", self.name, exc_info=True)
 
         # Resource templates
         if self.has_capability("resources"):
@@ -222,7 +222,7 @@ class MCPServerConnection:
                 self._resource_templates = result.get("resourceTemplates", [])
                 logger.info("[%s] Discovered %d resource templates", self.name, len(self._resource_templates))
             except Exception:
-                pass
+                logger.warning("[%s] Failed to discover resource templates", self.name, exc_info=True)
 
         # Prompts
         if self.has_capability("prompts"):
@@ -231,7 +231,7 @@ class MCPServerConnection:
                 self._prompts = result.get("prompts", [])
                 logger.info("[%s] Discovered %d prompts", self.name, len(self._prompts))
             except Exception:
-                pass
+                logger.warning("[%s] Failed to discover prompts", self.name, exc_info=True)
 
     # ── Tool calling ──
 
@@ -355,7 +355,7 @@ class StdioMCPConnection(MCPServerConnection):
                 f"Install it or check the path."
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to start MCP server: {e}")
+            raise RuntimeError(f"Failed to start MCP server: {e}") from e
 
         self._running = True
         self._reader_task = asyncio.create_task(self._read_loop())
@@ -427,7 +427,7 @@ class StdioMCPConnection(MCPServerConnection):
             self._process.stdin.write(line.encode("utf-8"))
             await self._process.stdin.drain()
         except Exception as e:
-            raise RuntimeError(f"Failed to send to MCP server: {e}")
+            raise RuntimeError(f"Failed to send to MCP server: {e}") from e
 
     async def send_request(self, method: str, params: dict[str, Any] | None = None) -> Any:
         """Send a JSON-RPC request and wait for the response."""

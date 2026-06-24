@@ -424,7 +424,7 @@ def create_server(
         if "10048" in str(e) or "98" in str(e) or "Address already in use" in str(e):
             logger.error("Port %d is already in use. Use --port to pick another, "
                         "or check: netstat -ano | findstr :%d", port, port)
-            raise SystemExit(1)
+            raise SystemExit(1) from e
         raise
 
     # Close idle connections after 30s to prevent file descriptor exhaustion
