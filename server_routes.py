@@ -45,6 +45,15 @@ class ServerRoutesMixin:
 
     # ── Handlers ────────────────────────────────────────────────────────
 
+    @classmethod
+    def _record_request(cls, path: str, status: int, latency_ms: float) -> None:
+        """Thread-safe request metric recording."""
+        with cls._metrics_lock:
+            cls._request_count[path] += 1
+            cls._total_latency_ms[path] += latency_ms
+            if status >= 400:
+                cls._error_count[path] += 1
+
     def _handle_health(self):
         # Public endpoint — only expose status, not internal config
         if self._check_auth():
@@ -60,6 +69,26 @@ class ServerRoutesMixin:
             })
         else:
             self._json_response({"status": "ok"})
+
+    def _handle_metrics(self):
+        """Metrics endpoint (GET /metrics) — request counts, errors, latency."""
+        cls = type(self)
+        with cls._metrics_lock:
+            uptime = time.time() - cls._server_start_time
+            by_path = {}
+            for path, count in sorted(cls._request_count.items()):
+                total_ms = cls._total_latency_ms.get(path, 0.0)
+                by_path[path] = {
+                    "requests": count,
+                    "errors": cls._error_count.get(path, 0),
+                    "avg_latency_ms": round(total_ms / max(count, 1), 1),
+                }
+            self._json_response({
+                "uptime_seconds": round(uptime, 1),
+                "total_requests": sum(cls._request_count.values()),
+                "total_errors": sum(cls._error_count.values()),
+                "by_path": by_path,
+            })
 
     def _handle_tools(self):
         if not self._require_auth("tools"):

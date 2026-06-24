@@ -37,8 +37,10 @@ import os
 import secrets
 import sys
 import threading
+import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
+from collections import defaultdict
 
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
@@ -139,6 +141,12 @@ class AgentAPIHandler(ServerRoutesMixin, RateLimiter, BaseHTTPRequestHandler):
     config: "AppConfig | None" = None
     store: "SessionStore | None" = None
     _ws_lock: threading.Lock = threading.Lock()  # protects workspace dir reads/writes
+    # ── Metrics (class-level, thread-safe counters) ─────────────────────
+    _metrics_lock: threading.Lock = threading.Lock()
+    _request_count: "defaultdict[str, int]" = defaultdict(int)  # path → count
+    _error_count: "defaultdict[str, int]" = defaultdict(int)    # path → errors
+    _total_latency_ms: "defaultdict[str, float]" = defaultdict(float)  # path → cumulative ms
+    _server_start_time: float = time.time()
 
     def __init__(self, *args, **kwargs):
         # Per-instance copies for thread-safe access under ThreadingHTTPServer
@@ -270,6 +278,7 @@ class AgentAPIHandler(ServerRoutesMixin, RateLimiter, BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
         except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError, OSError):
             pass  # client disconnected before response could be sent
+        self._record_request(self.path, status, 0)
 
     def _error(self, status: int, message: str):
         self._json_response({"error": message}, status)
@@ -303,12 +312,14 @@ class AgentAPIHandler(ServerRoutesMixin, RateLimiter, BaseHTTPRequestHandler):
     # ── Routing ─────────────────────────────────────────────────────────
 
     def do_GET(self):
+        t0 = time.time()
         if self.path != "/favicon.ico":
             logger.debug("GET %s", self.path)
         parts = self._path_parts()
 
         # ── Rate limiting ────────────────────────────────────────────────
         if not self._check_rate_limit(self.client_address[0]):
+            self._record_request(self.path, 429, (time.time() - t0) * 1000)
             self._error(429, "Too many requests. Please slow down.")
             return
 
@@ -316,6 +327,8 @@ class AgentAPIHandler(ServerRoutesMixin, RateLimiter, BaseHTTPRequestHandler):
             self._serve_spa()
         elif self.path == "/health":
             self._handle_health()
+        elif self.path == "/metrics":
+            self._handle_metrics()
         elif self.path == "/tools":
             if not self._require_auth("tools"): return
             self._handle_tools()
