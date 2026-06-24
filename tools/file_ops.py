@@ -12,8 +12,14 @@ file-oriented tool handlers used by the agent:
 All methods access shared state (workspace, file cache, edit callback)
 through ``self``, which is resolved at runtime when the mixin is
 combined with ``ToolExecutor``.
+
+File I/O uses ``asyncio.to_thread()`` for disk operations so the event
+loop never blocks on filesystem access.  Shell execution and web tools
+already use native async (create_subprocess_shell / httpx), so they
+don't need the bridge.
 """
 
+import asyncio
 import logging
 import time as _time
 from typing import Any
@@ -21,6 +27,20 @@ from typing import Any
 from .result import ToolResult
 
 logger = logging.getLogger(__name__)
+
+
+# ── Sync I/O helpers (dispatched via asyncio.to_thread) ──────────────────
+
+def _read_file_sync(path) -> str:
+    """Read a text file synchronously — used via asyncio.to_thread."""
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        return f.read()
+
+
+def _write_file_sync(path, content: str) -> None:
+    """Write a text file synchronously — used via asyncio.to_thread."""
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
 
 
 class FileOpsMixin:
@@ -106,8 +126,7 @@ class FileOpsMixin:
 
         if needs_disk_read:
             try:
-                with open(path, "r", encoding="utf-8", errors="replace") as f:
-                    raw = f.read()
+                raw = await asyncio.to_thread(_read_file_sync, path)
             except Exception as e:
                 return ToolResult(
                     success=False, output="", error=f"Cannot read file: {e}"
@@ -187,15 +206,13 @@ class FileOpsMixin:
         old_content = ""
         if path.exists():
             try:
-                with open(path, "r", encoding="utf-8") as f:
-                    old_content = f.read()
+                old_content = await asyncio.to_thread(_read_file_sync, path)
             except Exception:
                 pass
 
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(content)
+            await asyncio.to_thread(_write_file_sync, path, content)
             size = path.stat().st_size
 
             # Notify UI for diff display if overwriting
@@ -237,8 +254,7 @@ class FileOpsMixin:
             )
 
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                content = f.read()
+            content = await asyncio.to_thread(_read_file_sync, path)
         except Exception as e:
             return ToolResult(
                 success=False, output="", error=f"Cannot read file: {e}"
@@ -253,8 +269,7 @@ class FileOpsMixin:
             if result is not None:
                 new_content = result
                 try:
-                    with open(path, "w", encoding="utf-8") as f:
-                        f.write(new_content)
+                    await asyncio.to_thread(_write_file_sync, path, new_content)
                     self._notify_edit(str(path), old_content)
                     self._invalidate_cache(str(path))
                     return ToolResult(
@@ -284,8 +299,7 @@ class FileOpsMixin:
 
         new_content = content.replace(old_string, new_string, 1)
         try:
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(new_content)
+            await asyncio.to_thread(_write_file_sync, path, new_content)
 
             self._notify_edit(str(path), old_content)
             self._invalidate_cache(str(path))

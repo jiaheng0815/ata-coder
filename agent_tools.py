@@ -39,8 +39,8 @@ class ToolExecutionMixin:
     async def _execute_tool(self, tool_name: str, arguments: dict[str, Any]) -> ToolResult:
         """Execute a tool with fool-proof checks, dispatching to built-in or MCP.
 
-        Wraps synchronous tool execution in asyncio.to_thread() as a bridge
-        until tools.py is fully async (Phase 1.7).
+        File I/O uses asyncio.to_thread for disk ops; shell/web tools use
+        native async (create_subprocess_shell / httpx).  No blanket bridge.
         """
         source = "mcp" if (self.mcp and self.mcp.is_mcp_tool(tool_name)) else "builtin"
 
