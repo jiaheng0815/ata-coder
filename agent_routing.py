@@ -1,5 +1,6 @@
 """Model routing and task complexity classification — mixin for CoderAgent."""
 import logging
+import re
 
 from .settings import get_settings
 
@@ -13,8 +14,8 @@ class ModelRoutingMixin:
         Requires:
         - ``self.config`` — AppConfig instance
         Provides:
-        - ``_classify_task()`` — keyword+length heuristic (no API call)
-        - ``_ai_classify()`` — LLM-based classification for ambiguous cases
+        - ``_classify_task()`` — scored heuristic (no API call)
+        - ``_ai_classify()`` — scored heuristic classification for ambiguous cases
     """
 
     # ── Model routing ────────────────────────────────────────────────────
@@ -64,16 +65,20 @@ class ModelRoutingMixin:
     @staticmethod
     def _ai_classify(task: str) -> str:
         """
-        Classify task complexity using fast heuristics (NO extra LLM call).
+        Score-based task complexity classification (NO extra LLM call).
 
         Returns 'simple', 'complex', or 'normal'.
 
-        Heuristics:
-        - Very short (< 60 chars) → simple
-        - Very long (> 500 chars) → complex
-        - Contains complexity keywords → complex
-        - Contains simple-query keywords → simple
-        - Default → normal
+        Design:
+        - Length shortcuts for extreme cases (configurable thresholds)
+        - Middle-ground tasks (60–500 chars) use a weighted score:
+          positive signals → complex, negative signals → simple
+        - Score thresholds: >= 3 → complex, <= -2 → simple, else normal
+
+        This replaces the old binary keyword-match approach which could not
+        handle mixed-signal tasks like "implement a hello world" (complex
+        keyword in a simple task) or "what is causing the deadlock in my
+        8-file async pipeline" (simple keyword in a complex task).
         """
         task_lower = task.lower().strip()
         task_len = len(task)
@@ -91,23 +96,63 @@ class ModelRoutingMixin:
         if task_len >= complex_min:
             return "complex"
 
-        # ── Complexity keywords ───────────────────────────────────────
-        complex_keywords = [
-            "implement", "refactor", "architecture", "migrate", "redesign",
-            "optimize", "debug", "fix bug", "restructure", "multi-file",
-            "across multiple", "entire codebase", "from scratch", "set up",
-            "configure", "deploy", "pipeline", "database schema", "api endpoint",
-        ]
-        if any(kw in task_lower for kw in complex_keywords):
+        # ── Scored heuristic for middle-ground tasks ────────────────────
+        score = 0
+
+        # ---- Complexity signals (+1 to +3) ----
+
+        # Multi-step / numbered instructions (e.g. "1. do X\n2. then Y")
+        if re.search(r'\d+[\.\)]\s', task):
+            score += 3
+        if re.search(r'\b(steps?|first\b.*\bthen\b|next\b.*\bfinally\b|after that)\b',
+                     task_lower):
+            score += 2
+
+        # Code / file references present — implies reading/writing code
+        if '`' in task or '```' in task:
+            score += 2
+        if re.search(r'\b[a-zA-Z0-9_/]+\.(py|js|ts|rs|go|java|cpp|c|h|rb|sh|toml|yaml|json|sql)\b',
+                     task_lower):
+            score += 1
+
+        # Error / bug / crash language — debugging is harder than Q&A
+        if re.search(r'\b(error|bug|crash|fail(?:ed|ure|s)?|broken|doesn\'?t work|'
+                     r'not working|incorrect|wrong|unexpected|traceback|stack trace)\b',
+                     task_lower):
+            score += 2
+
+        # Creation / modification verbs — high agency required
+        if re.search(r'\b(implement|build|create|write|refactor|migrate|'
+                     r'redesign|architect|restructure|reorganize|overhaul)\b',
+                     task_lower):
+            score += 2
+
+        # Cross-cutting concern keywords
+        if re.search(r'\b(security|performance|concurrency|race condition|'
+                     r'deadlock|memory leak|scalability|latency)\b',
+                     task_lower):
+            score += 2
+
+        # ---- Simplicity signals (-1 to -3) ----
+
+        # Pure question / explanation patterns
+        if re.search(r'^(what|how|why|when|where|who|can you|could you|'
+                     r'is it|does|are there|do you)\b', task_lower):
+            score -= 2
+
+        # Single file / small scope / trivial
+        if re.search(r'\b(single|small|simple|quick|basic|just|only|trivial|'
+                     r'minor|tiny)\b', task_lower):
+            score -= 1
+
+        # Definition / lookup requests
+        if re.search(r'\b(define|definition|meaning|what does|explain|describe)\b',
+                     task_lower):
+            score -= 1
+
+        # ── Decision ──────────────────────────────────────────────────
+        if score >= 3:
             return "complex"
-
-        # ── Simple-query keywords ─────────────────────────────────────
-        simple_keywords = [
-            "what is", "how do i", "explain", "show me", "find", "search",
-            "list", "tell me about", "describe", "definition of", "example of",
-            "difference between", "why does", "where is",
-        ]
-        if any(kw in task_lower for kw in simple_keywords):
+        if score <= -2:
             return "simple"
-
         return "normal"

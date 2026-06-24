@@ -209,6 +209,74 @@ class TestCoderAgentRouting:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# CoderAgent — task classification heuristics
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestClassifyHeuristics:
+    """_ai_classify uses scored heuristics for 60–500 char tasks."""
+
+    # -- Length shortcuts --
+    def test_very_short_is_simple(self):
+        assert CoderAgent._ai_classify("Fix this bug") == "simple"
+
+    def test_very_long_is_complex(self):
+        long_task = "Please analyze the entire codebase and " + "x" * 500
+        assert CoderAgent._ai_classify(long_task) == "complex"
+
+    # -- Mixed signals (old approach would fail these) --
+    def test_simple_keyword_with_complex_intent(self):
+        """'what is' prefix but describes a complex debugging scenario."""
+        task = ("what is causing the deadlock in my 8-file async pipeline "
+                "with race conditions in the connection pool")
+        result = CoderAgent._ai_classify(task)
+        # Should NOT be simple despite starting with "what is"
+        assert result != "simple"
+
+    def test_complex_keyword_with_simple_task(self):
+        """'implement' keyword but task is trivial."""
+        task = "implement a hello world function that prints greeting"
+        result = CoderAgent._ai_classify(task)
+        # Should NOT be complex despite containing "implement"
+        assert result != "complex"
+
+    # -- Code references --
+    def test_code_blocks_signal_complex(self):
+        task = ("please refactor this code ```python\n"
+                "def handle(): pass\n``` "
+                "also fix the crash in src/auth.py and restructure the api/user.py module")
+        result = CoderAgent._ai_classify(task)
+        assert result == "complex"
+
+    # -- Bug/error language --
+    def test_error_report_is_complex(self):
+        task = ("The application crashes with a traceback in handler.py "
+                "line 42: KeyError unexpected in the middleware stack")
+        result = CoderAgent._ai_classify(task)
+        assert result == "complex"
+
+    # -- Multi-step --
+    def test_numbered_steps_is_complex(self):
+        task = ("1. Create the database migration\n"
+                "2. Update the ORM models\n"
+                "3. Add API endpoints\n"
+                "4. Write the integration tests")
+        result = CoderAgent._ai_classify(task)
+        assert result == "complex"
+
+    # -- Pure question --
+    def test_pure_question_is_simple(self):
+        task = "what is the difference between asyncio.gather and asyncio.wait in Python's standard library"
+        result = CoderAgent._ai_classify(task)
+        assert result == "simple"
+
+    # -- Normal (neither clearly simple nor complex) --
+    def test_ambiguous_mid_range(self):
+        task = "add a docstring to the calculate_total function in utils.py"
+        result = CoderAgent._ai_classify(task)
+        assert result in ("simple", "normal")  # should NOT be complex
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # CoderAgent — token estimation
 # ═══════════════════════════════════════════════════════════════════════════════
 
