@@ -24,6 +24,7 @@ import { randomUUID } from "node:crypto";
 import { AgentBridge, requestContext } from "./agent-bridge.ts";
 import { ShellManager } from "./shell-manager.ts";
 import { McpBridge } from "./mcp-bridge.ts";
+import { SessionStore } from "./session-store.ts";
 import type { ServerConfig, AgentResponse, StreamEvent } from "./types.ts";
 
 // ── Runtime argument parsing (zero-dependency) ──────────────────────────────
@@ -62,6 +63,7 @@ class AtaCoderServer implements Disposable {
   readonly #bridge: AgentBridge;
   readonly #shells: ShellManager;
   readonly #mcp: McpBridge;
+  readonly #sessionStore: SessionStore;
   #activeAgents = 0;
 
   constructor(config: ServerConfig) {
@@ -69,6 +71,7 @@ class AtaCoderServer implements Disposable {
     this.#bridge = new AgentBridge(config.pythonPath, config.workspaceDir);
     this.#shells = new ShellManager(config.shellTtlSeconds);
     this.#mcp = new McpBridge();
+    this.#sessionStore = new SessionStore(config.sessionTtlSeconds);
   }
 
   [Symbol.dispose](): void {
@@ -76,6 +79,7 @@ class AtaCoderServer implements Disposable {
     this.#bridge[Symbol.dispose]();
     this.#shells[Symbol.dispose]();
     this.#mcp[Symbol.dispose]();
+    this.#sessionStore[Symbol.dispose]();
     console.log("[server] All resources released.");
   }
 
@@ -259,16 +263,38 @@ class AtaCoderServer implements Disposable {
   // ── Session Management ────────────────────────────────────────────────────
 
   #handleListSessions(_req: IncomingMessage, res: ServerResponse): void {
-    // Stub: list sessions from Python agent (requires IPC extension)
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ sessions: [] }));
+    try {
+      const sessions = this.#sessionStore.list();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ sessions: sessions.map(s => ({
+        id: s.id,
+        created: s.created,
+        lastActive: s.lastActive,
+        messageCount: s.messageCount,
+        model: s.model,
+        skill: s.skill,
+      })) }));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Failed to list sessions", detail: String(e) }));
+    }
   }
 
   #handleDeleteSession(_req: IncomingMessage, res: ServerResponse, url: URL): void {
     const sessionId = url.pathname.split("/").pop();
-    // Stub: delete session via Python agent IPC
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ deleted: sessionId }));
+    if (!sessionId) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Missing session ID" }));
+      return;
+    }
+    try {
+      const existed = this.#sessionStore.delete(sessionId);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ deleted: sessionId, existed }));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Failed to delete session", detail: String(e) }));
+    }
   }
 
   // ── Shell Management ──────────────────────────────────────────────────────
