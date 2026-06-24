@@ -709,8 +709,9 @@ class CoderAgent(CompactionMixin, ToolExecutionMixin,
         When *user_input* is provided, memory recall is targeted to the
         current task rather than returning a generic summary.
         """
-        # Refresh model name on each build (may have changed via /model)
+        # Refresh model + workspace on each build (may have changed via /model or /workspace)
         self._prompt_builder.model = self.config.llm.model
+        self._prompt_builder.workspace = str(self.tools.workspace)
         prompt = self._prompt_builder.build(TOOL_DEFINITIONS, user_input=user_input)
         # Trigger extension point: on_system_prompt_build
         self._ep_on_system_prompt.trigger(prompt=prompt, task=user_input)

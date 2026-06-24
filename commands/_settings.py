@@ -108,6 +108,8 @@ def register_commands(r: Any) -> None:
         cfg.agent.workspace_dir = new_path
         agent.tools.workspace = Path(new_path)
         agent.tools.config.workspace_dir = new_path
+        # Invalidate cached system prompt so next LLM call picks up the new workspace
+        agent._cached_system_prompt = None
         print(f"Workspace: {new_path}")
         return True
 
