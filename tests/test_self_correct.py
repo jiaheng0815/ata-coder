@@ -86,6 +86,44 @@ class TestDiagnose:
         assert d is not None
         assert d.pattern == "File not found"
 
+    # ── New patterns (v1.0.3+) ─────────────────────────────────────────
+
+    def test_json_decode_error(self):
+        engine = SelfCorrectionEngine()
+        d = engine.diagnose("json.decoder.JSONDecodeError: Expecting ',' delimiter: line 42")
+        assert d is not None
+        assert d.retry_strategy == "auto_fix"
+
+    def test_disk_full(self):
+        engine = SelfCorrectionEngine()
+        d = engine.diagnose("OSError: [Errno 28] No space left on device")
+        assert d is not None
+        assert d.retry_strategy == "ask_user"
+
+    def test_name_error(self):
+        engine = SelfCorrectionEngine()
+        d = engine.diagnose("NameError: name 'result' is not defined")
+        assert d is not None
+        assert d.retry_strategy == "auto_fix"
+
+    def test_exit_code_nonzero(self):
+        engine = SelfCorrectionEngine()
+        d = engine.diagnose("Process exited with non-zero exit code 1")
+        assert d is not None
+        assert d.retry_strategy == "read_first"
+
+    def test_cancelled_error(self):
+        engine = SelfCorrectionEngine()
+        d = engine.diagnose("asyncio.exceptions.CancelledError: Task was cancelled")
+        assert d is not None
+        assert d.retry_strategy == "auto_fix"
+
+    def test_old_string_not_found(self):
+        engine = SelfCorrectionEngine()
+        d = engine.diagnose("Edit failed: old_string not found in file")
+        assert d is not None
+        assert d.retry_strategy == "read_first"
+
 
 # ── Fix suggestion: argument correction ────────────────────────────────────
 
@@ -243,7 +281,7 @@ def test_stats_initial_state():
 
 def test_error_patterns_not_empty():
     """Sanity check: ERROR_PATTERNS list has entries."""
-    assert len(ERROR_PATTERNS) >= 8
+    assert len(ERROR_PATTERNS) >= 14
     # All entries must have valid retry_strategy values
     valid_strategies = {"auto_fix", "read_first", "ask_user", "skip"}
     for ep in ERROR_PATTERNS:

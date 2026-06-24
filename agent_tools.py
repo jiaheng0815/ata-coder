@@ -34,7 +34,7 @@ class ToolExecutionMixin:
     # Guard depth for self-correction retry — prevents infinite recursion.
     # These are set as INSTANCE variables in CoderAgent.__init__ to avoid
     # cross-session contamination under ThreadingHTTPServer (server mode).
-    _MAX_SELF_CORRECT_DEPTH: int = 1
+    _MAX_SELF_CORRECT_DEPTH: int = 3
 
     async def _execute_tool(self, tool_name: str, arguments: dict[str, Any]) -> ToolResult:
         """Execute a tool with fool-proof checks, dispatching to built-in or MCP.
@@ -149,10 +149,18 @@ class ToolExecutionMixin:
             if tool_name == "run_shell" and "_original_command" not in arguments:
                 arguments = dict(arguments, _original_command=arguments.get("command", ""))
             diagnosis = self.self_correct.diagnose(result.error, tool_name, arguments)
-            if diagnosis and diagnosis.retry_strategy == "auto_fix":
+            if diagnosis and diagnosis.retry_strategy in ("auto_fix", "read_first"):
                 fixed_args = self.self_correct.suggest_fix(tool_name, arguments, diagnosis, error_message=result.error)
+                # read_first: auto-list the parent directory as context, then retry the original op
+                if diagnosis.retry_strategy == "read_first" and not fixed_args:
+                    if tool_name in ("read_file", "edit_file") and arguments.get("file_path"):
+                        parent = str(Path(arguments["file_path"]).parent)
+                        fixed_args = dict(arguments, file_path=parent)
+                        # Convert to a list_dir / read_file of parent to give LLM context
+                        tool_name = "read_file"
                 if fixed_args and fixed_args != arguments:
-                    logger.info("Auto-correcting: %s (was: %s)", diagnosis.fix_suggestion[:80], result.error[:80])
+                    logger.info("Auto-correcting [%s]: %s (was: %s)",
+                                diagnosis.retry_strategy, diagnosis.fix_suggestion[:80], result.error[:80])
                     # Retry with fixed args THROUGH the full safety pipeline
                     self._self_correct_depth += 1
                     try:

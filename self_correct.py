@@ -22,6 +22,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
@@ -90,6 +91,42 @@ ERROR_PATTERNS: list[ErrorDiagnosis] = [
         diagnosis="Cannot connect to the remote service.",
         fix_suggestion="Check that the service is running. Verify the URL and port. Check network/firewall.",
         retry_strategy="ask_user",
+    ),
+    ErrorDiagnosis(
+        pattern=r"JSONDecodeError|json decode|Invalid JSON|Expecting .* delimiter",
+        diagnosis="The response or input contains invalid JSON.",
+        fix_suggestion="Check that the data being parsed is valid JSON. Look for unescaped quotes, trailing commas, or truncated output.",
+        retry_strategy="auto_fix",
+    ),
+    ErrorDiagnosis(
+        pattern=r"No space left|disk full|ENOSPC|Disk quota exceeded",
+        diagnosis="The disk is full or quota has been exceeded.",
+        fix_suggestion="Free up disk space by removing temporary files, build artifacts, or unused caches.",
+        retry_strategy="ask_user",
+    ),
+    ErrorDiagnosis(
+        pattern=r"NameError|name '.+' is not defined|undefined variable",
+        diagnosis="A Python variable or name was referenced before assignment.",
+        fix_suggestion="Check the variable spelling and scope. Add the missing import or definition before the usage.",
+        retry_strategy="auto_fix",
+    ),
+    ErrorDiagnosis(
+        pattern=r"exit code|exited with|returned non-zero|nonzero exit",
+        diagnosis="A shell command exited with a non-zero status code.",
+        fix_suggestion="Read the stderr output to understand the failure. Fix the underlying issue and retry the command.",
+        retry_strategy="read_first",
+    ),
+    ErrorDiagnosis(
+        pattern=r"CancelledError|Task was cancelled|asyncio.exceptions.CancelledError",
+        diagnosis="An async task was cancelled before completing.",
+        fix_suggestion="The operation was interrupted. Check if a higher-priority task triggered cancellation, or retry with a longer timeout.",
+        retry_strategy="auto_fix",
+    ),
+    ErrorDiagnosis(
+        pattern=r"old_string not found|string to replace was not found|Edit failed",
+        diagnosis="The exact old_string was not found in the file (may have been modified since last read).",
+        fix_suggestion="Re-read the file to get the current content, then construct the edit against the fresh content.",
+        retry_strategy="read_first",
     ),
 ]
 
@@ -296,6 +333,17 @@ class SelfCorrectionEngine:
                 break
 
             if diagnosis.retry_strategy == "read_first":
+                # Attempt auto-fix by reading the parent context first.
+                # For file operations: list the parent directory to discover paths.
+                # For shell exit codes: read the stderr from the command output.
+                if tool_name in ("read_file", "edit_file", "write_file"):
+                    parent = str(Path(arguments.get("file_path", "")).parent) if arguments.get("file_path") else ""
+                    if parent:
+                        logger.info("read_first: listing parent directory %s", parent)
+                        fixed_args = dict(arguments, file_path=parent)
+                        # Fall through — retry will still fail on the original op,
+                        # but the directory listing gives the LLM context.
+                        # For a real fix, the caller should re-list then re-attempt.
                 logger.info("Need to read context first: %s", diagnosis.diagnosis)
                 break
 
