@@ -260,3 +260,62 @@ class ContextManager:
                     except json.JSONDecodeError:
                         pass
         return ops
+
+    @staticmethod
+    def extract_important_snippets(archive: list[Message], max_items: int = 15) -> list[str]:
+        """Extract high-signal snippets from archive messages for fallback summaries.
+
+        Scans for errors, code blocks, user instructions, and tool results —
+        the information an agent most needs to continue after compaction.
+        Returns up to *max_items* snippets, newest first.
+        """
+        snippets: list[str] = []
+        for m in reversed(archive):
+            if len(snippets) >= max_items:
+                break
+            role = m.get("role", "")
+            content = str(m.get("content", ""))
+
+            # ── Tool results: capture errors and truncated outputs ──────
+            if role == "tool" and content:
+                content_lower = content.lower()
+                is_error = any(kw in content_lower for kw in (
+                    "error", "traceback", "exception", "failed", "permission denied",
+                    "not found", "timeout", "command not found",
+                ))
+                is_truncated = "[truncated" in content or "output capped" in content
+                if is_error:
+                    # Keep error snippet (first 300 chars — the root cause)
+                    snippet = content[:300]
+                    if len(content) > 300:
+                        snippet += "…"
+                    snippets.append(f"[ERROR] {snippet}")
+                elif is_truncated:
+                    snippets.append(f"[TRUNCATED OUTPUT] {content[:200]}…")
+                elif len(snippets) < max_items:
+                    # Keep non-error tool output if we have room
+                    snippets.append(f"[tool output] {content[:150]}")
+
+            # ── Assistant messages: capture code blocks ──────────────────
+            elif role == "assistant" and content:
+                # Extract first code block (if any) as a snippet
+                if "```" in content:
+                    # Find the first code block
+                    start = content.find("```")
+                    end = content.find("```", start + 3)
+                    if end > start:
+                        code = content[start:end + 3]
+                        # Keep it brief
+                        if len(code) > 250:
+                            code = code[:250] + "\n…\n```"
+                        snippets.append(f"[code] {code}")
+                        continue
+
+            # ── User messages: preserve instructions ──────────────────────
+            elif role == "user" and content and len(snippets) < max_items:
+                # Only capture user messages that look like instructions
+                if len(content) > 30 and not content.startswith("["):
+                    snippets.append(f"[user] {content[:200]}")
+
+        snippets.reverse()  # chronological order
+        return snippets

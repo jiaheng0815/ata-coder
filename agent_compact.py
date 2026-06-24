@@ -255,10 +255,22 @@ class CompactionMixin:
         except Exception:  # noqa: BLE001
             logger.debug("LLM summarisation unavailable, using extractive fallback")
 
-        # ── Extractive fallback ─────────────────────────────────────────
+        # ── Extractive fallback (enriched) ──────────────────────────────
         parts = [f"Summarised {len(archive)} messages ({tool_count} tool calls)."]
         if user_msgs:
             parts.append(f"Topics: {'; '.join(user_msgs[:5])}")
         if file_ops:
             parts.append(f"Files modified: {', '.join(file_ops[:10])}")
+
+        # Extract high-signal snippets (errors, code, decisions) from the archive
+        # so the agent doesn't lose critical context when LLM summarisation is down.
+        try:
+            cm = self._context_manager
+            snippets = cm.extract_important_snippets(archive, max_items=12)
+            if snippets:
+                parts.append("Key context preserved:")
+                parts.extend(f"  {s}" for s in snippets)
+        except Exception:  # noqa: BLE001
+            logger.debug("Snippet extraction failed, using basic fallback")
+
         return "\n".join(parts)

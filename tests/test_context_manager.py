@@ -280,3 +280,68 @@ class TestCollectFileOps:
         }])]
         ops = ContextManager.collect_file_ops(msgs)
         assert ops == []  # should not raise
+
+
+# ── extract_important_snippets: high-signal archive extraction ──────────────
+
+class TestExtractSnippets:
+    """extract_important_snippets preserves errors, code, and instructions."""
+
+    def test_error_tool_result_captured(self):
+        archive = [
+            {"role": "tool", "content": "Error: File not found: /tmp/x.py\nTraceback: ..."},
+        ]
+        snippets = ContextManager.extract_important_snippets(archive)
+        assert any("ERROR" in s and "File not found" in s for s in snippets)
+
+    def test_code_block_extracted(self):
+        archive = [
+            {"role": "assistant",
+             "content": "Here's the fix:\n```python\ndef foo():\n    return 42\n```\nThat should work."},
+        ]
+        snippets = ContextManager.extract_important_snippets(archive)
+        assert any("[code]" in s and "def foo" in s for s in snippets)
+
+    def test_user_instruction_preserved(self):
+        archive = [
+            {"role": "user",
+             "content": "Please refactor the auth module to use JWT instead of session cookies"},
+        ]
+        snippets = ContextManager.extract_important_snippets(archive)
+        assert any("[user]" in s and "refactor" in s for s in snippets)
+
+    def test_short_user_message_skipped(self):
+        """Messages under 30 chars are not worth preserving as snippets."""
+        archive = [
+            {"role": "user", "content": "ok"},
+            {"role": "user", "content": "yes"},
+        ]
+        snippets = ContextManager.extract_important_snippets(archive)
+        assert not any("[user]" in s for s in snippets)
+
+    def test_max_items_respected(self):
+        archive = [
+            {"role": "user", "content": "Task " + str(i) + ": do something important and complex"} for i in range(30)
+        ]
+        snippets = ContextManager.extract_important_snippets(archive, max_items=5)
+        assert len(snippets) <= 5
+
+    def test_truncated_output_captured(self):
+        archive = [
+            {"role": "tool", "content": "Build output… [truncated at line 5000]"},
+        ]
+        snippets = ContextManager.extract_important_snippets(archive)
+        assert any("TRUNCATED" in s for s in snippets)
+
+    def test_empty_archive_returns_empty(self):
+        assert ContextManager.extract_important_snippets([]) == []
+
+    def test_error_snippet_truncated_at_300_chars(self):
+        archive = [
+            {"role": "tool", "content": "Error: " + ("x" * 500)},
+        ]
+        snippets = ContextManager.extract_important_snippets(archive)
+        error_snippet = [s for s in snippets if "ERROR" in s]
+        assert len(error_snippet) > 0
+        # Should be truncated (300 + "…" overhead)
+        assert len(error_snippet[0]) <= 320
