@@ -119,7 +119,7 @@ def run_setup_wizard() -> None:
     print()
 
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 
 def print_banner() -> None:

@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.0.2 (2026-06-24)
+
+Bug fix release — exception chains & MCP discoverability.
+
+**Bug fixes (2):**
+- 异常链断裂：`llm_client.py`/`mcp_client.py`/`server.py` 共6处 `raise RuntimeError` 缺少 `from e`，丢失原始异常 traceback
+- MCP 发现静默失败：资源/资源模板/Prompt 三项发现异常时 `except Exception: pass`，用户无任何反馈 → 改为 `logger.warning(exc_info=True)`
+
 ## v1.0.1 (2026-06-22)
 
 Bug fixes, test coverage, and quality improvements.
